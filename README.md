@@ -449,8 +449,8 @@ A: 是的，机器人实现了安全可靠的配置加载机制，当配置文�
 ## 联系方式
 
 如有问题或建议，欢迎通过以下方式联系：
-- GitHub Issues：https://github.com/yourusername/bionic-bot/issues
-- 邮箱：your.email@example.com
+- GitHub Issues：https://github.com/ArsvineZhu/BionicBot/issues
+- 邮箱：2162371684@qq.com
 
 ---
 
