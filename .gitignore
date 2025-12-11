@@ -1,0 +1,60 @@
+# 环境和依赖
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 配置文件
+config.yaml
+bot/data/config/config.yaml
+bot/data/key
+bot/config/soul_doc/
+napcat/config/napcat.json
+napcat/config/napcat_*.json
+napcat/config/onebot11_*.json
+napcat/config/webui.json
+
+# 日志文件
+logs/
+*.log
+*.log.*
+
+# 数据文件
+data/
+bot/data/long_term_memory.json
+
+# 临时文件
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# IDE和编辑器
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 构建和发布
+build/
+dist/
+*.egg-info/
+*.whl
+
+# 测试覆盖率
+coverage.xml
+.coverage
+.pytest_cache/
+
+# 其他
+.trae/
+napcat/native/
+napcat/static/
