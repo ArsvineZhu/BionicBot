@@ -5,6 +5,9 @@ __pycache__/
 *.pyo
 *.pyd
 
+plugins/
+napcat/
+
 # 配置文件
 config.yaml
 bot/data/config/config.yaml
