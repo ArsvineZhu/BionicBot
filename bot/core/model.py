@@ -135,38 +135,49 @@ class ApiModel:
         ret = {
             "model": self.model,
             "input": [i.export for i in self.messages],
-            "previous_response_id": self.previous_response_id,
-            "stream": self.stream,
-            "thinking": {"type": self.thinking},
-            "caching": {"type": ABILITY.ENABLED if self.caching else ABILITY.DISABLED},
-            "temperature": self.temperature,
-            "reasoning": {"effort": self.reasoning},
         }
         
         # 添加可选参数（如果提供）
-        if self.max_tokens is not None:
-            ret["max_tokens"] = self.max_tokens
+        if self.previous_response_id is not None:
+            ret["previous_response_id"] = self.previous_response_id
         
-        if self.stop is not None:
-            ret["stop"] = self.stop
+        if self.stream:
+            ret["stream"] = self.stream
         
-        if self.top_p is not None:
-            ret["top_p"] = self.top_p
+        # 思考过程参数（某些模型支持）
+        if self.thinking != ABILITY.ENABLED:
+            ret["thinking"] = {"type": self.thinking}
         
-        if self.top_k is not None:
-            ret["top_k"] = self.top_k
+        # 缓存参数（某些模型支持）
+        if self.caching:
+            ret["caching"] = {"type": ABILITY.ENABLED}
         
-        if self.presence_penalty is not None:
-            ret["presence_penalty"] = self.presence_penalty
+        # 生成参数
+        if self.temperature != 1.0:
+            ret["temperature"] = self.temperature
         
-        if self.frequency_penalty is not None:
-            ret["frequency_penalty"] = self.frequency_penalty
+        # 推理参数（某些模型支持）
+        if self.reasoning != EFFORT.MEDIUM:
+            ret["reasoning"] = {"effort": self.reasoning}
         
-        if self.response_format is not None:
-            ret["response_format"] = self.response_format
-        
-        # 只有当tools非空时才添加
+        # 工具调用参数
         if self.tools:
             ret["tools"] = self.tools
+        
+        # 火山方舟API不支持以下参数，暂时注释掉
+        # if self.max_tokens is not None:
+        #     ret["max_tokens"] = self.max_tokens
+        # if self.stop is not None:
+        #     ret["stop"] = self.stop
+        # if self.top_p is not None:
+        #     ret["top_p"] = self.top_p
+        # if self.top_k is not None:
+        #     ret["top_k"] = self.top_k
+        # if self.presence_penalty is not None:
+        #     ret["presence_penalty"] = self.presence_penalty
+        # if self.frequency_penalty is not None:
+        #     ret["frequency_penalty"] = self.frequency_penalty
+        # if self.response_format is not None:
+        #     ret["response_format"] = self.response_format
         
         return ret
