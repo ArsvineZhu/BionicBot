@@ -62,8 +62,8 @@ Bionic Bot是一款基于ncatbot框架开发的智能QQ机器人，集成了AI�
 
 1. **克隆项目**
 ```bash
-git clone https://github.com/yourusername/bionic-bot.git
-cd bionic-bot
+git clone https://github.com/ArsvineZhu/bionicbot.git
+cd bionicbot
 ```
 
 2. **创建虚拟环境**
