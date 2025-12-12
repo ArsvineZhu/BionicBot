@@ -5,10 +5,14 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import hashlib
+import re
 
+from ncatbot.utils import get_log
 from bot.config.settings import BotSettings
 from bot.core.model import Content, Message, ROLE_TYPE
 from bot.core.conversation_manager import ConversationManager, ConversationThread
+
+logger = get_log("MemoryManager")
 
 
 @dataclass
@@ -27,6 +31,10 @@ class Conversation:
     user_contexts: Dict[str, UserContext] = field(default_factory=dict)
     response_id: Optional[str] = None
     last_active: datetime = field(default_factory=datetime.now)
+    # 对话摘要
+    summary: Optional[str] = None
+    # 上次生成摘要的时间
+    last_summarized: datetime = field(default_factory=datetime.now)
 
 
 class LongTermMemory:
@@ -129,6 +137,45 @@ class MemoryManager:
             self.conversations[key] = Conversation()
         return self.conversations[key]
         
+    async def generate_conversation_summary(self, key: str, ai_client) -> Optional[str]:
+        """生成对话摘要"""
+        conv = self.get_conversation(key)
+        
+        # 如果没有足够的消息，不需要生成摘要
+        if len(conv.global_messages) < BotSettings.SUMMARY_MIN_MESSAGES:
+            return None
+        
+        # 生成摘要
+        limit = min(BotSettings.SUMMARY_MAX_MESSAGES, len(conv.global_messages))
+        summary = await ai_client.generate_summary(conv.global_messages[-limit:])  # 使用最近消息生成摘要
+        if summary:
+            conv.summary = summary
+            conv.last_summarized = datetime.now()
+            logger.info(f"成功生成对话摘要: {key}")
+            return summary
+        
+        return None
+    
+    async def check_and_generate_summaries(self, ai_client):
+        """检查并生成所有需要的对话摘要"""
+        for key, conv in self.conversations.items():
+            # 检查是否需要生成摘要：
+            # 1. 没有摘要
+            # 2. 距离上次生成摘要超过指定小时数
+            # 3. 消息数量超过指定数量且距离上次生成摘要超过指定分钟数
+            need_summary = False
+            time_since_last = datetime.now() - conv.last_summarized
+            
+            if not conv.summary:
+                need_summary = True
+            elif time_since_last > timedelta(hours=BotSettings.SUMMARY_INTERVAL_HOURS):
+                need_summary = True
+            elif len(conv.global_messages) > BotSettings.SUMMARY_MAX_MESSAGES and time_since_last > timedelta(minutes=BotSettings.SUMMARY_SHORT_INTERVAL_MINUTES):
+                need_summary = True
+            
+            if need_summary:
+                await self.generate_conversation_summary(key, ai_client)
+    
     def cleanup_expired_contexts(self):
         """清理过期上下文"""
         expired_keys = []
@@ -231,7 +278,7 @@ class MemoryManager:
                 thread.topic = self.conversation_manager.analyze_topic(thread)
 
     def get_messages(self, key: str, limit: int = None, user_id: str = None) -> List[Message]:  # type: ignore
-        """获取对话消息，支持获取全局消息或用户特定消息"""
+        """获取对话消息，支持获取全局消息或用户特定消息，当有摘要时使用摘要+最近消息来减少tokens消耗"""
         conv = self.get_conversation(key)
         
         if user_id and user_id in conv.user_contexts:
@@ -240,6 +287,20 @@ class MemoryManager:
         else:
             # 获取全局消息
             messages = conv.global_messages
+        
+        # 如果有摘要，并且消息数量超过阈值，使用摘要+最近消息
+        if conv.summary and len(messages) > BotSettings.SUMMARY_MIN_MESSAGES * 2:
+            # 使用摘要+最近消息，摘要作为第一条消息
+            summary_message = Message(
+                content=Content(f"[对话摘要] {conv.summary}"),
+                role=ROLE_TYPE.SYSTEM
+            )
+            
+            # 获取最近的几条消息，数量为限制的一半或固定数量
+            recent_count = limit // 2 if limit and limit > 2 else 5
+            recent_messages = messages[-recent_count:] if recent_count > 0 else []
+            
+            return [summary_message] + recent_messages
         
         if limit and len(messages) > limit:
             return messages[-limit:]
@@ -264,7 +325,7 @@ class MemoryManager:
         # 构建昵称-地址映射表内容
         nickname_address_content = ""
         if BotSettings.ENABLE_NICKNAME_ADDRESS_INJECTION and BotSettings.NICKNAME_ADDRESS_MAPPING:
-            nickname_address_content = "\n\n用户昵称-地址映射表（请在回复中参考使用）:"
+            nickname_address_content = "\n\n用户昵称-称呼映射表（请在回复中参考使用）:"
             for nickname, address in BotSettings.NICKNAME_ADDRESS_MAPPING.items():
                 nickname_address_content += f"\n- {nickname}: {address}"
 

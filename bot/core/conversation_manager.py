@@ -15,6 +15,7 @@ class ConversationThread:
     participants: List[str] = field(default_factory=list)
     last_active: datetime = field(default_factory=datetime.now)
     topic: Optional[str] = None
+    topic_just_changed: bool = False  # 新增：标记话题是否刚刚变化
     
     def add_message(self, message: Message, user_id: str):
         """添加消息到线程"""
@@ -191,6 +192,13 @@ class ConversationManager:
         top_keywords = sorted(filtered_words.items(), key=lambda x: x[1], reverse=True)[:3]
         
         if top_keywords:
-            return ",".join([word for word, _ in top_keywords])
+            new_topic = ",".join([word for word, _ in top_keywords])
+        else:
+            new_topic = "未确定话题"
         
-        return "未确定话题"
+        # 检查话题是否发生变化
+        if thread.topic != new_topic:
+            thread.topic_just_changed = True
+            thread.topic = new_topic
+        
+        return thread.topic

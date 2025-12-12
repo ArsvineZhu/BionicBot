@@ -20,16 +20,6 @@ class GroupMessageHandler:
         self.ai_client = ai_client
         self.tracker = tracker
         self.bot_user_id = None
-        
-    async def initialize(self, bot_api):
-        """初始化处理器"""
-        try:
-            bot_info = await bot_api.get_login_info()
-            self.bot_user_id = str(bot_info.user_id)
-            logger.info(f"机器人用户ID: {self.bot_user_id}")
-        except Exception as e:
-            logger.error(f"获取机器人信息失败: {e}")
-            self.bot_user_id = None
     
     async def handle(self, event: GroupMessageEvent, bot_api: BotAPI) -> bool:
         """处理群聊消息"""

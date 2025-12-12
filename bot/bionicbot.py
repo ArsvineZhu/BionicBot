@@ -14,7 +14,7 @@ logger = get_log("Main")
 
 
 class BionicBot:
-    """主机器人"""
+    """Bionic 机器人"""
     
     def __init__(self):
         # 验证配置
@@ -51,21 +51,11 @@ class BionicBot:
             """处理私聊消息"""
             await self.private_handler.handle(event, self.bot.api)
     
-    async def initialize(self):
-        """初始化机器人"""
-        # 初始化群聊处理器
-        await self.group_handler.initialize(self.bot.api)
-        
-        logger.info("机器人初始化完成，准备启动...")
-    
     def run(self):
         """启动机器人"""
         try:
-            # 运行初始化
-            asyncio.run(self.initialize())
-            
             # 启动机器人
-            self.bot.run()
+            self.bot.run_frontend()
             
         except KeyboardInterrupt:
             logger.info("收到停止信号，正在关闭机器人...")
@@ -73,9 +63,3 @@ class BionicBot:
             logger.error(f"机器人运行异常: {e}", exc_info=True)
         finally:
             logger.info("机器人已关闭")
-
-
-if __name__ == "__main__":
-    # 创建并运行机器人
-    bot = BionicBot()
-    bot.run()

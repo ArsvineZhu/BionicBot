@@ -100,7 +100,7 @@ class FunctionCalling:
 
 @dataclass
 class ApiModel:
-    """向 API 发送的标准请求模型"""
+    """向火山方舟 API 发送的标准请求模型"""
 
     model: str
     messages: List[Message]
@@ -112,6 +112,13 @@ class ApiModel:
     reasoning: str = EFFORT.MEDIUM
     temperature: float = 1.0  # type: ignore
     tools: List[Dict[str, Any]] = field(default_factory=list)
+    max_tokens: int | None = None
+    stop: List[str] | None = None
+    top_p: float | None = None
+    top_k: int | None = None
+    presence_penalty: float | None = None
+    frequency_penalty: float | None = None
+    response_format: Dict[str, Any] | None = None
 
     _temperature: float = 1.0
 
@@ -123,7 +130,8 @@ class ApiModel:
     def temperature(self, value: float) -> None:
         self._temperature = min(max(value, 0), 2)
 
-    def export(self, reasoning_available: bool = True) -> Dict[str, Any]:
+    @property
+    def export(self) -> Dict[str, Any]:
         ret = {
             "model": self.model,
             "input": [i.export for i in self.messages],
@@ -132,7 +140,33 @@ class ApiModel:
             "thinking": {"type": self.thinking},
             "caching": {"type": ABILITY.ENABLED if self.caching else ABILITY.DISABLED},
             "temperature": self.temperature,
+            "reasoning": {"effort": self.reasoning},
         }
-        if reasoning_available:
-            ret["reasoning"] = {"effort": self.reasoning}
+        
+        # 添加可选参数（如果提供）
+        if self.max_tokens is not None:
+            ret["max_tokens"] = self.max_tokens
+        
+        if self.stop is not None:
+            ret["stop"] = self.stop
+        
+        if self.top_p is not None:
+            ret["top_p"] = self.top_p
+        
+        if self.top_k is not None:
+            ret["top_k"] = self.top_k
+        
+        if self.presence_penalty is not None:
+            ret["presence_penalty"] = self.presence_penalty
+        
+        if self.frequency_penalty is not None:
+            ret["frequency_penalty"] = self.frequency_penalty
+        
+        if self.response_format is not None:
+            ret["response_format"] = self.response_format
+        
+        # 只有当tools非空时才添加
+        if self.tools:
+            ret["tools"] = self.tools
+        
         return ret

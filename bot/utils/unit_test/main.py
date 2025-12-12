@@ -154,7 +154,7 @@ class AIChatBot:
             thinking=ABILITY.ENABLED,
             temperature=1,
             # reasoning=EFFORT.MEDIUM,
-        ).export(reasoning_available=False)
+        ).export
 
         try:
             # 调用AI接口

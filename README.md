@@ -14,6 +14,7 @@ Bionic Bot是一款基于ncatbot框架开发的智能QQ机器人，集成了AI�
 - 🔍 **历史记录获取**：自动获取聊天历史记录，增强上下文理解
 - ⏱️ **智能延迟**：根据消息长度生成合理的回复延迟，模拟真实聊天体验
 - 📅 **时间标记**：每条消息前添加格式化时间戳，便于上下文理解
+- 📝 **AI决策模型**：使用更快、更便宜的模型决定是否应该回复
 
 ### 高级功能
 - 📝 **多回复模式**：支持多种回复触发模式（关键词、@、AI自主判断等）
@@ -22,8 +23,10 @@ Bionic Bot是一款基于ncatbot框架开发的智能QQ机器人，集成了AI�
 - 🧠 **记忆系统**：支持短期记忆和长期记忆
 - 📋 **对话线程管理**：自动识别和管理不同对话线程
 - 🏷️ **话题检测**：智能检测对话话题，保持话题相关性
-- 🔧 **可配置性**：所有功能均支持通过YAML配置文件调整
+- 🔧 **可配置性**：所有功能均支持通过模块化YAML配置文件调整
 - 🏷️ **昵称-称呼映射**：支持昵称到标准称呼的映射，增强回复的个性化
+- 📊 **对话摘要系统**：定期或在获取历史记录后自动生成聊天摘要，优化上下文管理
+- 📝 **动态提示词加载**：支持从文件动态加载系统提示词，便于维护和更新
 
 ### 优化特性
 - 🕵️ **隐私保护**：配置文件和密钥文件集中管理在`bot/data/`目录，保护隐私数据
@@ -32,6 +35,8 @@ Bionic Bot是一款基于ncatbot框架开发的智能QQ机器人，集成了AI�
 - 🚀 **性能优化**：优化状态管理，减少不必要的API调用
 - 🔒 **配置安全**：实现了安全的配置加载机制，支持配置文件不存在、解析错误等异常情况的安全处理
 - 🧪 **完善测试**：编写了全面的单元测试，确保配置系统的正确性和可靠性
+- 📁 **模块化配置**：配置文件拆分为ai.yaml、bot.yaml和system.yaml，便于维护和管理
+- 🔍 **配置示例文件**：提供带注释的配置示例文件，便于用户配置
 
 ## 技术栈
 
@@ -78,169 +83,187 @@ pip install -r bot/requirements.txt
 ```
 
 4. **配置文件设置**
-   - 复制 `bot/data/config/config.yaml.example` 为 `bot/data/config/config.yaml`
-   - 根据需要修改配置项
+   - 配置文件已拆分为三个模块化文件，位于 `bot/data/config/` 目录：
+     - `ai.yaml`：AI模型配置、摘要系统配置、记忆配置等
+     - `bot.yaml`：机器人基础配置、回复模式配置、关键词配置等
+     - `system.yaml`：系统配置、日志配置、WebUI配置等
+   - 每个配置文件都有对应的示例文件（如 `ai.yaml.example`），带有详细注释
+   - 复制示例文件并删除 `.example` 后缀，根据需要修改配置项
    - 将API密钥写入 `bot/data/key` 文件
 
 5. **启动机器人**
 ```bash
-# 使用模块方式启动（推荐）
-python -m bot.main
-
-# 或直接运行脚本
-python bot/main.py
+# 直接运行脚本
+python main.py
 ```
 
 ## 配置说明
 
-配置文件位于 `bot/data/config/config.yaml`，采用YAML格式，支持动态调整，无需重启机器人即可生效。配置系统实现了安全可靠的加载机制，当配置文件不存在、解析错误或权限问题时，会使用合理的默认值继续运行。
+配置文件已拆分为三个模块化文件，位于 `bot/data/config/` 目录，采用YAML格式，支持动态调整，无需重启机器人即可生效。配置系统实现了安全可靠的加载机制，当配置文件不存在、解析错误或权限问题时，会使用合理的默认值继续运行。
 
-### 配置项分类
+### 配置文件结构
 
-#### 1. 目标对象配置
-```yaml
-# 机器人需要响应的目标群组ID列表（字符串类型）
-target_groups: ["123456789"]
-# 机器人需要响应的目标用户ID列表（私聊场景，字符串类型）
-target_users: ["987654321"]
+```
+bot/data/config/
+├── ai.yaml          # AI模型、摘要系统、记忆配置等
+├── bot.yaml         # 机器人基础配置、回复模式、关键词等
+├── system.yaml      # 系统配置、日志、WebUI等
+└── *.yaml.example   # 配置示例文件，带有详细注释
 ```
 
-#### 2. AI模型配置
-```yaml
-# AI模型名称，用于指定使用哪个模型进行对话生成
-model: "doubao-seed-1-6-lite-251015"
-```
+### 1. AI配置 (ai.yaml)
 
-#### 3. 机器人基础配置
-```yaml
-# 机器人名称，用于在对话中标识自己
-bot_name: "Yuki"
-```
+包含AI模型配置、摘要系统配置、记忆配置等。
 
-#### 4. 记忆系统配置
 ```yaml
-# 短期记忆最大消息数，超过该数量的旧消息将被自动清理
+# AI基础配置
+base_url: https://ark.cn-beijing.volces.com/api/v3
+api_key_path: ../key
+
+# 模型配置 - Main model
+model: "doubao-seed-1-6-251015"
+temperature: 0.8
+reasoning: MEDIUM  # 可用值: MINIMAL, LOW, MEDIUM, HIGH
+reasoning_available: true
+cache: true
+
+# Decision model (用于AI决策是否回复)
+decision_model: "doubao-seed-1-6-flash-250828"
+decision_temperature: 0.0
+decision_reasoning: MINIMAL
+decision_reasoning_available: false
+decision_cache: false
+
+# 摘要系统配置
+summary_enabled: true
+summary_model: "doubao-seed-1-6-flash-250828"
+summary_temperature: 0.1
+summary_min_messages: 10
+summary_max_messages: 50
+summary_interval_hours: 1
+summary_short_interval_minutes: 30
+summary_check_frequency: 10
+
+# 记忆配置
 short_term_memory_limit: 50
-# 长期记忆存储路径
 long_term_memory_path: "data/long_term_memory.json"
+long_term_memory_limit: 50
+long_term_memory_default_importance: 1.0
+
+# 历史记录配置
+enable_history_retrieval: true
+history_retrieval_limit: 50
+history_retrieval_max_length: 1000
+history_retrieval_on_first_message: true
+history_retrieval_on_new_session: true
+
+# 高级模型配置
+# 这些配置用于更精细地控制模型生成
+max_tokens: 2048
+stop: null
+top_p: 0.9
+presence_penalty: 0.0
+frequency_penalty: 0.0
+
+# Decision model 高级配置
+decision_max_tokens: 100
+decision_stop: ["\n"]
+decision_top_p: null
+decision_top_k: null
 ```
 
-#### 5. 灵魂文档配置
+### 2. 机器人配置 (bot.yaml)
+
+包含机器人基础配置、回复模式配置、关键词配置等。
+
 ```yaml
-# 灵魂文档路径，包含机器人的身份、性格、知识背景等核心定义
+# 机器人基础配置
+bot_name: "Yuki"
 soul_doc_path: "config/soul_doc/yuki.md"
-```
 
-#### 6. 回复模式配置
-```yaml
-# 支持的回复模式
+# 目标配置
+target_groups: ["1044284401"]
+target_users: ["2162371684"]
+
+# 回复模式
 response_modes:
   none: "无回复"
   keyword: "关键词触发"
   at: "@触发"
-  at_and_keyword: "@+关键词"  # 被@或包含关键词就回复（或关系）
+  at_and_keyword: "@+关键词"
   ai_decide: "AI自主判断"
   random: "随机回复"
 
-# 默认回复模式
 default_response_mode: "at_and_keyword"
-```
 
-#### 7. 触发配置
-```yaml
-# 触发机器人回复的关键词列表
-trigger_keywords: ["yuki", "Yuki"]
-# 随机回复模式下的触发概率（0-1之间）
-random_threshold: 0.1
-# 是否启用正则表达式关键词匹配
+# 关键词配置
+trigger_keywords: ["yuki", "Yuki", "YUKI", "YKTS"]
 enable_regex_keywords: true
-```
 
-#### 8. 消息处理配置
-```yaml
-# 单条消息的最大长度限制
+# 随机回复
+random_threshold: 0.1
+
+# 消息处理
 max_message_length: 2000
-# 是否在回复时@原发送者
 enable_at_reply: true
-```
 
-#### 9. 上下文管理配置
-```yaml
-# 上下文超时时间（小时）
-context_timeout_hours: 2
-# 上下文切换阈值（0-1之间）
-context_switch_threshold: 0.2
-# 上下文切换的最小消息数阈值
-context_switch_min_messages: 50
-# 上下文切换时分析的最近消息数量
-context_switch_analyze_count: 20
-```
-
-#### 10. 话题检测配置
-```yaml
-# 话题相关性阈值（0-1之间）
-topic_relevance_threshold: 0.3
-# 话题检测间隔（消息数）
-topic_detection_interval: 50
-```
-
-#### 11. 对话线程配置
-```yaml
-# 对话线程超时时间（分钟）
-thread_timeout_minutes: 60
-# 对话线程清理间隔（分钟）
-thread_cleanup_interval: 60
-```
-
-#### 12. 响应优化配置
-```yaml
-# 是否启用上下文关联响应
-context_related_response_enabled: true
-# 上下文关联响应的超时时间（分钟）
-context_related_timeout_minutes: 20
-```
-
-#### 13. 历史记录配置
-```yaml
-# 是否启用历史记录获取功能
-enable_history_retrieval: true
-# 历史记录获取数量限制
-history_retrieval_limit: 50
-# 历史记录最大总长度（字符数）
-history_retrieval_max_length: 1000
-# 是否在收到首条消息时获取历史记录
-history_retrieval_on_first_message: true
-# 是否在新会话开始时获取历史记录
-history_retrieval_on_new_session: true
-```
-
-#### 14. 长期记忆配置
-```yaml
-# 构建系统提示时获取的长期记忆数量
-long_term_memory_limit: 50
-# 长期记忆的重要性默认值
-long_term_memory_default_importance: 1.0
-```
-
-#### 15. 昵称-称呼映射表配置
-```yaml
-# 昵称-称呼映射表，用于在系统提示中注入用户昵称和对应的称呼信息
+# 昵称-称呼映射
 nickname_address_mapping:
   "Texas": "A酱"
   "Arsvine": "A酱"
-  "Yuki": "Yuki"
-
-# 是否启用昵称-称呼映射表注入
 enable_nickname_address_injection: true
-# 昵称-称呼映射表在系统提示中的注入位置
 nickname_address_injection_position: "bottom"
 ```
+
+### 3. 系统配置 (system.yaml)
+
+包含系统配置、日志配置、WebUI配置等。
+
+```yaml
+# 系统配置
+log_level: "INFO"
+debug: false
+
+# 插件配置
+enable_plugins: true
+
+# NAPCat配置
+napcat_enabled: true
+napcat_ws_uri: "ws://localhost:3001"
+
+# WebUI配置
+webui_enabled: false
+webui_port: 6099
+```
+
+### 配置加载顺序
+
+1. 加载默认配置 `DEFAULT_CONFIG`
+2. 依次加载 `ai.yaml`、`bot.yaml`、`system.yaml`
+3. 后面加载的配置会覆盖前面的同名配置
+4. 所有配置项都有合理的默认值，确保系统正常运行
+
+### 配置验证
+
+配置系统会在初始化时验证配置的有效性，包括：
+- 模型名称不能为空
+- 灵魂文档必须存在
+- 随机阈值必须在0-1之间
+- 默认回复模式必须是有效模式
+- 触发关键词必须是列表类型
+- 昵称-称呼映射表必须是字典类型
+
+### 配置示例文件
+
+每个配置文件都有对应的示例文件（如 `ai.yaml.example`），带有详细注释和默认值，便于用户参考和配置。示例文件不会被机器人加载，您需要复制示例文件并删除 `.example` 后缀才能使用。
 
 ## 项目结构
 
 ```
 bot/
 ├── config/             # 配置相关
+│   ├── prompt/         # 提示词文件目录
+│   │   └── should_respond_prompt.txt  # AI决策提示词
 │   ├── soul_doc/       # 灵魂文档目录
 │   └── settings.py     # 配置加载和管理
 ├── core/               # 核心功能模块
@@ -253,11 +276,16 @@ bot/
 │   └── tracker.py      # 目标对象追踪和触发判断
 ├── data/               # 数据目录（隐私数据）
 │   ├── config/         # YAML配置文件
+│   │   ├── ai.yaml     # AI配置
+│   │   ├── bot.yaml    # 机器人配置
+│   │   ├── system.yaml # 系统配置
+│   │   └── *.example   # 配置示例文件
 │   └── key             # API密钥文件
 ├── handlers/           # 事件处理器
 │   ├── group_handler.py  # 群聊消息处理
 │   └── private_handler.py  # 私聊消息处理
 ├── utils/              # 工具函数
+│   └── unit_test/      # 单元测试脚本
 ├── __init__.py         # 模块初始化
 ├── main.py             # 项目入口
 └── requirements.txt    # 依赖列表
@@ -272,13 +300,23 @@ bot/
 - 实现对话历史记录的自动获取
 - 支持根据消息长度生成智能回复延迟
 - 添加消息时间标记，增强上下文理解
+- 实现AI决策模型，判断是否应该回复
+- 集成对话摘要系统，定期生成聊天摘要
+- 支持动态提示词加载，便于维护和更新
+- 支持模块化配置，根据配置文件调整AI行为
+- 实现记忆系统，管理短期和长期记忆
+- 支持多种AI模型配置，包括主模型和决策模型
 
 ### 配置系统 (settings.py)
 - 安全可靠的配置加载机制
-- 支持YAML格式配置文件
+- 支持模块化YAML配置文件（ai.yaml、bot.yaml、system.yaml）
 - 独立的默认配置体系，确保配置项完整性
 - 敏感数据的掩码处理
 - 配置文件不存在、解析错误等异常情况的安全处理
+- 支持动态配置加载，无需重启机器人
+- 配置项验证机制，确保配置值的有效性
+- 支持配置示例文件，便于用户参考和配置
+- 模块化配置结构，便于维护和扩展
 
 ### 记忆系统 (memory.py)
 - 短期记忆：管理近期对话记录
@@ -287,6 +325,11 @@ bot/
 - 上下文切换检测：根据消息主题变化自动切换上下文
 - 话题关联：判断消息与上下文的相关性
 - 长期记忆获取和管理
+- 对话摘要系统：定期或在获取历史记录后生成聊天摘要
+- 支持配置摘要生成的频率和条件
+- 支持不同模型用于生成摘要
+- 实现记忆重要性评估机制
+- 智能历史消息构建：当有摘要时使用摘要+最近消息来减少tokens消耗，优化API调用效果
 
 ### 对话管理器 (conversation_manager.py)
 - 对话线程识别和创建

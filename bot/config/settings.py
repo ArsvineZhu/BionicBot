@@ -66,8 +66,41 @@ CONFIG = load_config()
 DEFAULT_CONFIG = {
     # AI配置
     "model": "doubao-seed-1-6-lite-251015",
+    "decision_model": "doubao-seed-1-6-flash-250828",
     "base_url": "https://ark.cn-beijing.volces.com/api/v3",
     "api_key_path": "../key",
+    
+    # 模型配置 - Main model
+    "temperature": 0.8,
+    "reasoning": "MEDIUM",
+    "reasoning_available": True,
+    "cache": True,
+    "max_tokens": None,
+    "top_p": None,
+    "top_k": None,
+    "presence_penalty": None,
+    "frequency_penalty": None,
+    "stop": None,
+    
+    # 模型配置 - Decision model
+    "decision_temperature": 0.0,
+    "decision_reasoning": "MINIMAL",
+    "decision_reasoning_available": False,
+    "decision_cache": False,
+    "decision_max_tokens": 100,
+    "decision_top_p": None,
+    "decision_top_k": None,
+    "decision_stop": ["\n"],
+    
+    # 摘要系统配置
+    "summary_enabled": True,
+    "summary_model": "doubao-seed-1-6-flash-250828",
+    "summary_temperature": 0.1,
+    "summary_min_messages": 10,
+    "summary_max_messages": 50,
+    "summary_interval_hours": 1,
+    "summary_short_interval_minutes": 30,
+    "summary_check_frequency": 10,
     
     # 记忆配置
     "short_term_memory_limit": 30,
@@ -180,7 +213,40 @@ class BotSettings:
     
     # AI模型配置
     MODEL: str = CONFIG.get("model", DEFAULT_CONFIG["model"])
+    DECISION_MODEL: str = CONFIG.get("decision_model", DEFAULT_CONFIG["decision_model"])
     BASE_URL: str = CONFIG.get("base_url", DEFAULT_CONFIG["base_url"])
+    
+    # 模型配置 - Main model
+    TEMPERATURE: float = CONFIG.get("temperature", DEFAULT_CONFIG["temperature"])
+    REASONING: str = CONFIG.get("reasoning", DEFAULT_CONFIG["reasoning"])
+    REASONING_AVAILABLE: bool = CONFIG.get("reasoning_available", DEFAULT_CONFIG["reasoning_available"])
+    CACHE: bool = CONFIG.get("cache", DEFAULT_CONFIG["cache"])
+    MAX_TOKENS: Optional[int] = CONFIG.get("max_tokens", DEFAULT_CONFIG["max_tokens"])
+    TOP_P: Optional[float] = CONFIG.get("top_p", DEFAULT_CONFIG["top_p"])
+    TOP_K: Optional[int] = CONFIG.get("top_k", DEFAULT_CONFIG["top_k"])
+    PRESENCE_PENALTY: Optional[float] = CONFIG.get("presence_penalty", DEFAULT_CONFIG["presence_penalty"])
+    FREQUENCY_PENALTY: Optional[float] = CONFIG.get("frequency_penalty", DEFAULT_CONFIG["frequency_penalty"])
+    STOP: Optional[List[str]] = CONFIG.get("stop", DEFAULT_CONFIG["stop"])
+    
+    # 模型配置 - Decision model
+    DECISION_TEMPERATURE: float = CONFIG.get("decision_temperature", DEFAULT_CONFIG["decision_temperature"])
+    DECISION_REASONING: str = CONFIG.get("decision_reasoning", DEFAULT_CONFIG["decision_reasoning"])
+    DECISION_REASONING_AVAILABLE: bool = CONFIG.get("decision_reasoning_available", DEFAULT_CONFIG["decision_reasoning_available"])
+    DECISION_CACHE: bool = CONFIG.get("decision_cache", DEFAULT_CONFIG["decision_cache"])
+    DECISION_MAX_TOKENS: Optional[int] = CONFIG.get("decision_max_tokens", DEFAULT_CONFIG["decision_max_tokens"])
+    DECISION_TOP_P: Optional[float] = CONFIG.get("decision_top_p", DEFAULT_CONFIG["decision_top_p"])
+    DECISION_TOP_K: Optional[int] = CONFIG.get("decision_top_k", DEFAULT_CONFIG["decision_top_k"])
+    DECISION_STOP: Optional[List[str]] = CONFIG.get("decision_stop", DEFAULT_CONFIG["decision_stop"])
+    
+    # 摘要系统配置
+    SUMMARY_ENABLED: bool = CONFIG.get("summary_enabled", DEFAULT_CONFIG["summary_enabled"])
+    SUMMARY_MODEL: str = CONFIG.get("summary_model", DEFAULT_CONFIG["summary_model"])
+    SUMMARY_TEMPERATURE: float = CONFIG.get("summary_temperature", DEFAULT_CONFIG["summary_temperature"])
+    SUMMARY_MIN_MESSAGES: int = CONFIG.get("summary_min_messages", DEFAULT_CONFIG["summary_min_messages"])
+    SUMMARY_MAX_MESSAGES: int = CONFIG.get("summary_max_messages", DEFAULT_CONFIG["summary_max_messages"])
+    SUMMARY_INTERVAL_HOURS: int = CONFIG.get("summary_interval_hours", DEFAULT_CONFIG["summary_interval_hours"])
+    SUMMARY_SHORT_INTERVAL_MINUTES: int = CONFIG.get("summary_short_interval_minutes", DEFAULT_CONFIG["summary_short_interval_minutes"])
+    SUMMARY_CHECK_FREQUENCY: int = CONFIG.get("summary_check_frequency", DEFAULT_CONFIG["summary_check_frequency"])
     
     # AI决策提示词配置
     SHOULD_RESPOND_PROMPT_PATH: str = CONFIG.get("should_respond_prompt_path", DEFAULT_CONFIG["should_respond_prompt_path"])
