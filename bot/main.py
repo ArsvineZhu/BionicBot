@@ -3,12 +3,12 @@ import asyncio
 from ncatbot.core import BotClient, GroupMessageEvent, PrivateMessageEvent
 from ncatbot.utils import get_log
 
-from bot.config.settings import BotSettings
-from bot.core.ai_client import AIClient
-from bot.core.tracker import TargetTracker
-from bot.handlers.group_handler import GroupMessageHandler
-from bot.handlers.private_handler import PrivateMessageHandler
-from bot.utils.helpers import mask_sensitive_data
+from .config.settings import BotSettings
+from .core.ai_client import AIClient
+from .core.tracker import TargetTracker
+from .handlers.group_handler import GroupMessageHandler
+from .handlers.private_handler import PrivateMessageHandler
+from .utils.helpers import mask_sensitive_data
 
 logger = get_log("Main")
 

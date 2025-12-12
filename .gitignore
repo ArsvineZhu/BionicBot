@@ -13,6 +13,8 @@ config.yaml
 bot/data/config/config.yaml
 bot/data/key
 bot/config/soul_doc/
+# 允许所有示例文件
+!**/*.example
 napcat/config/napcat.json
 napcat/config/napcat_*.json
 napcat/config/onebot11_*.json

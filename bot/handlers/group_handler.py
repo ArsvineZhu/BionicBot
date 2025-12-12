@@ -72,10 +72,13 @@ class GroupMessageHandler:
         logger.debug(f"[调试] 是否被@: {is_at}, 原始消息: {raw_message}")
         
         # 判断是否需要回复
-        should_reply = self.tracker.should_respond(
+        should_reply = await self.tracker.should_respond(
             message_text=raw_message,
             is_at=is_at,
-            is_private=False
+            is_private=False,
+            ai_client=self.ai_client,
+            user_info=user_info.__dict__,
+            group_id=user_info.group_id
         )
         
         logger.debug(f"[调试] 回复判断: {should_reply}, 模式: {self.tracker.mode.value}, 是否被@: {is_at}, 关键词: {self.tracker._contains_keyword(cleaned_message)}")
@@ -121,8 +124,8 @@ class GroupMessageHandler:
             # 计算消息总长度
             total_length = len(cleaned_content)
             
-            # 计算延迟时间 (每字符延迟0.5秒，基础延迟1秒)
-            base_delay = 1.0 + total_length * 0.5
+            # 计算延迟时间 (每字符延迟1秒，基础延迟1秒)
+            base_delay = 1.0 + total_length * 1.0
             
             # 减去API调用已经花费的时间，确保延迟不会为负数
             delay_seconds = max(0.1, base_delay - api_time)

@@ -1,6 +1,7 @@
 # core/ai_client.py
 import asyncio
-from typing import Dict, Optional, Tuple
+from datetime import datetime
+from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass
 
 from volcenginesdkarkruntime import Ark
@@ -24,7 +25,7 @@ class AIClient:
     
     def __init__(self):
         self.client = Ark(
-            base_url="https://ark.cn-beijing.volces.com/api/v3",
+            base_url=BotSettings.BASE_URL,
             api_key=get_api_key(),
         )
         self.memory_manager = MemoryManager()
@@ -237,17 +238,116 @@ class AIClient:
             import traceback
             traceback.print_exc()
     
+    async def should_respond(
+        self, 
+        message: str, 
+        user_info: dict, 
+        group_id: Optional[str] = None,
+        conversation_history: List[Message] = None
+    ) -> bool:
+        """询问AI是否应该回复当前消息"""
+        conversation_history = conversation_history or []
+        
+        # 获取对话键名
+        conv_key = self._get_conversation_key(user_info, group_id)
+        is_group = group_id is not None
+        
+        # 构建系统提示词，专门用于判断是否应该回复
+        decision_prompt = Message(
+            content=Content(BotSettings.SHOULD_RESPOND_PROMPT),
+            role=ROLE_TYPE.SYSTEM
+        )
+        
+        # 构建用户消息
+        display_name = user_info.get('card', '') or user_info.get('nickname', '未知用户')
+        current_time = datetime.now().strftime('%y年%H:%M')
+        user_msg = Message(
+            content=Content(f"{display_name}[{current_time}]: {message}"),
+            role=ROLE_TYPE.USER
+        )
+        
+        # 构建请求消息列表，包含历史上下文和当前消息
+        limit = min(BotSettings.HISTORY_RETRIEVAL_LIMIT, len(conversation_history))
+        messages = [decision_prompt] + conversation_history[-limit:] + [user_msg]
+        
+        # 构建API请求
+        apimodel = ApiModel(
+            model=BotSettings.MODEL,
+            messages=messages,
+            thinking=ABILITY.DISABLED,  # 不需要思考过程
+            temperature=0.0,  # 确定性输出
+        ).export(reasoning_available=False)
+        
+        try:
+            # 调用AI接口
+            response = self.client.responses.create(**apimodel)
+            
+            # 打印完整响应，用于调试
+            logger.debug(f"AI响应原始数据: {response}")
+            
+            # 提取回复内容
+            reply_text = self._extract_reply_text(response).strip().upper()
+            
+            # 打印提取的回复文本
+            logger.debug(f"提取的回复文本: '{reply_text}'")
+            
+            # 返回判断结果
+            result = reply_text == "YES"
+            logger.debug(f"是否应该回复: {result}")
+            return result
+        except Exception as e:
+            print(f"AI回复判断失败: {e}")
+            import traceback
+            traceback.print_exc()
+            # 失败时默认不回复
+            return False
+    
     def _extract_reply_text(self, response) -> str:
         """从响应中提取回复文本"""
         try:
+            # 打印响应的类型和属性，用于调试
+            logger.debug(f"响应类型: {type(response)}")
+            logger.debug(f"响应属性: {dir(response)}")
+            
             # 尝试从不同位置提取回复
-            if hasattr(response, 'output') and response.output:
-                for output in response.output:
-                    if hasattr(output, 'content') and output.content:
-                        for content in output.content:
-                            if hasattr(content, 'text') and content.text:
-                                return content.text.strip()
-        except (AttributeError, IndexError):
-            pass
+            if hasattr(response, 'output'):
+                logger.debug(f"响应output: {response.output}")
+                if response.output:
+                    for i, output in enumerate(response.output):
+                        logger.debug(f"output[{i}]类型: {type(output)}")
+                        logger.debug(f"output[{i}]属性: {dir(output)}")
+                        
+                        if hasattr(output, 'content'):
+                            logger.debug(f"output[{i}].content: {output.content}")
+                            if output.content:
+                                for j, content in enumerate(output.content):
+                                    logger.debug(f"content[{j}]类型: {type(content)}")
+                                    logger.debug(f"content[{j}]属性: {dir(content)}")
+                                    
+                                    if hasattr(content, 'text'):
+                                        logger.debug(f"content[{j}].text: {content.text}")
+                                        if content.text:
+                                            return content.text.strip()
+            
+            # 尝试直接从响应中提取文本（不同AI服务可能有不同的响应格式）
+            if hasattr(response, 'text'):
+                logger.debug(f"直接从response.text提取: {response.text}")
+                return response.text.strip()
+            
+            # 尝试从响应的其他属性中提取
+            if hasattr(response, 'choices'):
+                logger.debug(f"响应choices: {response.choices}")
+                if response.choices:
+                    for choice in response.choices:
+                        if hasattr(choice, 'message') and hasattr(choice.message, 'content'):
+                            logger.debug(f"从choices中提取: {choice.message.content}")
+                            return choice.message.content.strip()
+                            
+        except Exception as e:
+            logger.error(f"提取回复失败: {e}")
+            import traceback
+            traceback.print_exc()
         
+        # 打印完整响应，用于调试
+        logger.debug(f"无法解析的完整响应: {response}")
         return "[错误] 无法解析AI回复"

@@ -36,6 +36,20 @@ class PrivateMessageHandler:
         masked_display_name = get_masked_display_name(user_info.display_name, user_info.user_id)
         logger.info(f"[私聊] {masked_display_name}: {cleaned_message[:50]}...")
         
+        # 判断是否需要回复
+        should_reply = await self.tracker.should_respond(
+            message_text=cleaned_message,
+            is_at=False,
+            is_private=True,
+            ai_client=self.ai_client,
+            user_info=user_info.__dict__,
+            group_id=None
+        )
+        
+        if not should_reply:
+            logger.debug(f"[忽略] 不符合回复条件 - 模式:{self.tracker.mode.value}")
+            return False
+        
         # 状态管理标志
         status_set = False
         
@@ -73,8 +87,8 @@ class PrivateMessageHandler:
             # 计算消息总长度
             total_length = len(ai_response.content)
             
-            # 计算基础延迟时间 (每字符延迟0.5秒，基础延迟1秒)
-            base_delay = 1.0 + total_length * 0.5
+            # 计算基础延迟时间 (每字符延迟1秒，基础延迟1秒)
+            base_delay = 1.0 + total_length * 1.0
             
             # 减去API调用已经花费的时间，确保延迟不会为负数
             delay_seconds = max(0.1, base_delay - api_time)

@@ -1,7 +1,7 @@
 # config/settings.py
 import os
 import yaml
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 
 # 基础路径
@@ -15,50 +15,98 @@ DATA_DIR.mkdir(exist_ok=True)
 # 加载YAML配置文件
 def load_config() -> Dict[str, Any]:
     """安全加载配置文件，配置文件不存在时返回空字典"""
-    config_path = DATA_DIR / "config" / "config.yaml"
-    if not config_path.exists():
-        print(f"[WARN] 配置文件不存在: {config_path}，将使用默认配置")
-        return {}
+    config_dir = DATA_DIR / "config"
+    config_files = [
+        config_dir / "ai.yaml",
+        config_dir / "bot.yaml",
+        config_dir / "system.yaml"
+    ]
     
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            # 尝试加载YAML文件
-            config = yaml.safe_load(f)
-            # 确保返回的是字典类型
-            if config is None:
-                print(f"[WARN] 配置文件为空: {config_path}，将使用默认配置")
-                return {}
-            if not isinstance(config, dict):
-                print(f"[WARN] 配置文件格式错误，期望字典类型，实际为: {type(config).__name__}，将使用默认配置")
-                return {}
-            return config
-    except yaml.YAMLError as e:
-        print(f"[WARN] YAML配置文件解析错误: {e}，将使用默认配置")
-        return {}
-    except PermissionError:
-        print(f"[WARN] 无权限读取配置文件: {config_path}，将使用默认配置")
-        return {}
-    except UnicodeDecodeError:
-        print(f"[WARN] 配置文件编码错误，无法使用UTF-8解码: {config_path}，将使用默认配置")
-        return {}
-    except Exception as e:
-        print(f"[WARN] 加载配置文件失败: {e}，将使用默认配置")
-        return {}
+    merged_config = {}
+    
+    for config_path in config_files:
+        if not config_path.exists():
+            print(f"[WARN] 配置文件不存在: {config_path}，将跳过该配置")
+            continue
+        
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                # 尝试加载YAML文件
+                config = yaml.safe_load(f)
+                # 确保返回的是字典类型
+                if config is None:
+                    print(f"[WARN] 配置文件为空: {config_path}，将跳过该配置")
+                    continue
+                if not isinstance(config, dict):
+                    print(f"[WARN] 配置文件格式错误，期望字典类型，实际为: {type(config).__name__}，将跳过该配置")
+                    continue
+                
+                # 合并配置，后面的配置会覆盖前面的同名配置
+                merged_config.update(config)
+                print(f"[INFO] 成功加载配置文件: {config_path}")
+        except yaml.YAMLError as e:
+            print(f"[WARN] YAML配置文件解析错误: {e}，将跳过该配置")
+            continue
+        except PermissionError:
+            print(f"[WARN] 无权限读取配置文件: {config_path}，将跳过该配置")
+            continue
+        except UnicodeDecodeError:
+            print(f"[WARN] 配置文件编码错误，无法使用UTF-8解码: {config_path}，将跳过该配置")
+            continue
+        except Exception as e:
+            print(f"[WARN] 加载配置文件失败: {e}，将跳过该配置")
+            continue
+    
+    return merged_config
 
 # 加载配置
 CONFIG = load_config()
 
 # 默认配置体系
 DEFAULT_CONFIG = {
-    "target_groups": [],
-    "target_users": [],
+    # AI配置
     "model": "doubao-seed-1-6-lite-251015",
-    "bot_name": "AI助手",
+    "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+    "api_key_path": "../key",
+    
+    # 记忆配置
     "short_term_memory_limit": 30,
-    "long_term_memory_path": "data/long_term_memory.json",
+    "long_term_memory_path": "long_term_memory.json",
     "long_term_memory_limit": 5,
     "long_term_memory_default_importance": 1.0,
-    "soul_doc_path": "config/soul_doc/bot.md",
+    
+    # 历史记录配置
+    "enable_history_retrieval": True,
+    "history_retrieval_limit": 20,
+    "history_retrieval_max_length": 1000,
+    "history_retrieval_on_first_message": True,
+    "history_retrieval_on_new_session": True,
+    
+    # 上下文管理
+    "context_timeout_hours": 2,
+    "context_switch_threshold": 0.2,
+    "context_switch_min_messages": 5,
+    "context_switch_analyze_count": 3,
+    "context_related_response_enabled": True,
+    "context_related_timeout_minutes": 5,
+    
+    # 话题检测
+    "topic_relevance_threshold": 0.3,
+    "topic_detection_interval": 5,
+    
+    # 对话线程
+    "thread_timeout_minutes": 60,
+    "thread_cleanup_interval": 30,
+    
+    # 机器人配置
+    "bot_name": "AI助手",
+    "soul_doc_path": "soul_doc/yuki.md",
+    
+    # 目标配置
+    "target_groups": [],
+    "target_users": [],
+    
+    # 回复模式
     "response_modes": {
         "none": "无回复",
         "keyword": "关键词触发",
@@ -68,31 +116,61 @@ DEFAULT_CONFIG = {
         "random": "随机回复"
     },
     "default_response_mode": "at_and_keyword",
+    
+    # 关键词配置
     "trigger_keywords": [],
+    "enable_regex_keywords": True,
+    
+    # 随机回复
     "random_threshold": 0.1,
+    
+    # 消息处理
     "max_message_length": 2000,
     "enable_at_reply": True,
-    "context_timeout_hours": 2,
-    "context_switch_threshold": 0.2,
-    "context_switch_min_messages": 5,
-    "context_switch_analyze_count": 3,
-    "topic_relevance_threshold": 0.3,
-    "topic_detection_interval": 5,
-    "thread_timeout_minutes": 60,
-    "thread_cleanup_interval": 30,
-    "context_related_response_enabled": True,
-    "context_related_timeout_minutes": 5,
-    "enable_regex_keywords": True,
-    "enable_history_retrieval": True,
-    "history_retrieval_limit": 20,
-    "history_retrieval_max_length": 1000,
-    "history_retrieval_on_first_message": True,
-    "history_retrieval_on_new_session": True,
+    
+    # 昵称-称呼映射
     "nickname_address_mapping": {},
     "enable_nickname_address_injection": True,
-    "nickname_address_injection_position": "bottom"
+    "nickname_address_injection_position": "bottom",
+    
+    # 系统配置
+    "log_level": "INFO",
+    "debug": False,
+    "enable_plugins": True,
+    "napcat_enabled": True,
+    "napcat_ws_uri": "ws://localhost:3001",
+    "webui_enabled": False,
+    "webui_port": 6099,
+    
+    # AI决策提示词
+    "should_respond_prompt_path": "bot/config/prompt/should_respond_prompt.txt"
 }
 
+
+# 加载提示词的辅助函数
+def _load_prompt_from_file(file_path: str) -> str:
+    """从文件加载提示词"""
+    try:
+        # 处理路径，确保可以找到文件
+        if file_path.startswith("bot/"):
+            full_path = BASE_DIR / file_path
+        else:
+            full_path = BASE_DIR / "bot" / file_path
+        
+        with open(full_path, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+        
+        # 确保提示词包含要求的结尾
+        required_ending = "请只回复'YES'或'NO'，不要添加任何其他内容。"
+        if not content.endswith(required_ending):
+            content += "\n" + required_ending
+        
+        return content
+    except Exception as e:
+        print(f"[ERROR] 加载AI决策提示词失败: {e}")
+        # 返回默认提示词
+        default_prompt = "你需要判断是否应该回复用户的消息。请仅根据上下文和当前消息判断。"
+        return default_prompt + "\n" + required_ending
 
 # 机器人配置
 class BotSettings:
@@ -102,6 +180,11 @@ class BotSettings:
     
     # AI模型配置
     MODEL: str = CONFIG.get("model", DEFAULT_CONFIG["model"])
+    BASE_URL: str = CONFIG.get("base_url", DEFAULT_CONFIG["base_url"])
+    
+    # AI决策提示词配置
+    SHOULD_RESPOND_PROMPT_PATH: str = CONFIG.get("should_respond_prompt_path", DEFAULT_CONFIG["should_respond_prompt_path"])
+    SHOULD_RESPOND_PROMPT: str = _load_prompt_from_file(SHOULD_RESPOND_PROMPT_PATH)
     
     # 机器人基础配置
     BOT_NAME: str = CONFIG.get("bot_name", DEFAULT_CONFIG["bot_name"])
@@ -111,7 +194,15 @@ class BotSettings:
     LONG_TERM_MEMORY_PATH: str = str(DATA_DIR / CONFIG.get("long_term_memory_path", DEFAULT_CONFIG["long_term_memory_path"]).replace("data/", ""))
     
     # 灵魂文档路径
-    SOUL_DOC_PATH: str = str(BASE_DIR / "bot" / "config" / "soul_doc" / CONFIG.get("soul_doc_path", DEFAULT_CONFIG["soul_doc_path"]).replace("config/soul_doc/", ""))
+    soul_doc_path = CONFIG.get("soul_doc_path", DEFAULT_CONFIG["soul_doc_path"])
+    # 如果路径已经包含 bot/ 或 config/，直接使用
+    if soul_doc_path.startswith("bot/"):
+        SOUL_DOC_PATH: str = str(BASE_DIR / soul_doc_path)
+    elif soul_doc_path.startswith("config/"):
+        SOUL_DOC_PATH: str = str(BASE_DIR / "bot" / soul_doc_path)
+    else:
+        # 默认处理，假设是相对于 bot/config/ 的路径
+        SOUL_DOC_PATH: str = str(BASE_DIR / "bot" / "config" / soul_doc_path)
     
     # 回复模式配置
     RESPONSE_MODES = CONFIG.get("response_modes", DEFAULT_CONFIG["response_modes"])
@@ -174,6 +265,20 @@ class BotSettings:
         assert cls.MODEL, "模型名称不能为空"
         assert cls.SOUL_DOC_PATH and os.path.exists(cls.SOUL_DOC_PATH), "灵魂文档不存在"
         assert cls.RANDOM_THRESHOLD >= 0 and cls.RANDOM_THRESHOLD <= 1, "随机阈值必须在0-1之间"
+        
+        # 验证回复模式配置
+        from bot.core.tracker import ResponseMode
+        valid_modes = [mode.value for mode in ResponseMode]
+        assert cls.DEFAULT_RESPONSE_MODE in valid_modes, f"默认回复模式必须是以下之一: {', '.join(valid_modes)}"
+        
+        # 验证触发关键词配置
+        assert isinstance(cls.TRIGGER_KEYWORDS, list), "触发关键词必须是列表类型"
+        for keyword in cls.TRIGGER_KEYWORDS:
+            assert isinstance(keyword, str), f"触发关键词必须是字符串类型，当前类型: {type(keyword).__name__}"
+        
+        # 验证上下文相关配置
+        assert isinstance(cls.CONTEXT_RELATED_RESPONSE_ENABLED, bool), "上下文相关响应开关必须是布尔类型"
+        assert cls.CONTEXT_RELATED_TIMEOUT_MINUTES > 0, "上下文相关响应超时时间必须大于0"
         
         # 验证昵称-地址映射表配置
         assert isinstance(cls.NICKNAME_ADDRESS_MAPPING, dict), "昵称-地址映射表必须是字典类型"

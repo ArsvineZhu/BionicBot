@@ -7,8 +7,11 @@ from datetime import datetime, timedelta
 import re
 
 from ncatbot.core.event import BaseMessageEvent, GroupMessageEvent, PrivateMessageEvent
+from ncatbot.utils import get_log
 from bot.core.model import Message
 from bot.config.settings import BotSettings
+
+logger = get_log("TargetTracker")
 
 
 class ResponseMode(Enum):
@@ -50,51 +53,109 @@ class TargetTracker:
             return str(event.user_id) in BotSettings.TARGET_USERS
         return False
     
-    def should_respond(
+    async def should_respond(
         self, 
         message_text: str, 
         is_at: bool = False, 
         is_private: bool = False,
         conversation_history: List[Message] = None,
-        last_response_time: datetime = None
+        last_response_time: datetime = None,
+        ai_client = None,
+        user_info = None,
+        group_id = None
     ) -> bool:
         """判断是否需要响应"""
         conversation_history = conversation_history or []
         
+        # 回复决策日志字典
+        decision_log = {
+            "mode": self.mode.value,
+            "is_at": is_at,
+            "is_private": is_private,
+            "contains_keyword": self._contains_keyword(message_text),
+            "random_result": None,
+            "context_related": None,
+            "final_decision": False,
+            "ai_decision": None
+        }
+        
         # 私聊总是回复（除非明确设置none模式）
         if is_private:
-            return self.mode != ResponseMode.NONE
+            decision = self.mode != ResponseMode.NONE
+            decision_log["final_decision"] = decision
+            logger.info(f"回复决策: {decision_log}")
+            return decision
         
         # 根据回复模式判断
         if self.mode == ResponseMode.NONE:
+            decision_log["final_decision"] = False
+            logger.info(f"回复决策: {decision_log}")
             return False
         
         elif self.mode == ResponseMode.KEYWORD:
-            return self._contains_keyword(message_text)
+            contains_keyword = self._contains_keyword(message_text)
+            decision_log["contains_keyword"] = contains_keyword
+            decision_log["final_decision"] = contains_keyword
+            logger.info(f"回复决策: {decision_log}")
+            return contains_keyword
         
         elif self.mode == ResponseMode.AT:
+            decision_log["final_decision"] = is_at
+            logger.info(f"回复决策: {decision_log}")
             return is_at
         
         elif self.mode == ResponseMode.AT_AND_KEYWORD:
-            return is_at or self._contains_keyword(message_text)
+            decision = is_at or self._contains_keyword(message_text)
+            decision_log["final_decision"] = decision
+            logger.info(f"回复决策: {decision_log}")
+            return decision
         
         elif self.mode == ResponseMode.RANDOM:
             if is_at:
+                decision_log["final_decision"] = True
+                logger.info(f"回复决策: {decision_log}")
                 return True
-            return random.random() < BotSettings.RANDOM_THRESHOLD
+            
+            random_value = random.random()
+            decision_log["random_result"] = {
+                "value": random_value,
+                "threshold": BotSettings.RANDOM_THRESHOLD
+            }
+            decision = random_value < BotSettings.RANDOM_THRESHOLD
+            decision_log["final_decision"] = decision
+            logger.info(f"回复决策: {decision_log}")
+            return decision
         
         elif self.mode == ResponseMode.AI_DECIDE:
-            # AI自主判断模式，添加上下文关联判断
+            # 快速判断：如果被@或包含关键词，直接回复
             if is_at or self._contains_keyword(message_text):
+                decision_log["final_decision"] = True
+                logger.info(f"回复决策: {decision_log}")
                 return True
             
-            # 上下文关联判断：如果最近有回复，且消息与上下文相关
-            if self._is_context_related(message_text, conversation_history, last_response_time):
-                return True
+            # 检查是否有AI客户端，否则使用本地上下文判断
+            if ai_client and user_info:
+                # 调用AI客户端判断是否应该回复
+                ai_decision = await ai_client.should_respond(
+                    message=message_text,
+                    user_info=user_info,
+                    group_id=group_id,
+                    conversation_history=conversation_history
+                )
+                decision_log["ai_decision"] = ai_decision
+                decision_log["final_decision"] = ai_decision
+                logger.info(f"回复决策: {decision_log}")
+                return ai_decision
             
-            # 随机响应，概率较低
-            return random.random() < 0.1
+            # 备用方案：本地上下文关联判断
+            context_related = self._is_context_related(message_text, conversation_history, last_response_time)
+            decision_log["context_related"] = context_related
+            decision_log["final_decision"] = context_related
+            logger.info(f"回复决策: {decision_log}")
+            return context_related
         
+        decision_log["final_decision"] = False
+        logger.info(f"回复决策: {decision_log}")
         return False
     
     def _is_context_related(
