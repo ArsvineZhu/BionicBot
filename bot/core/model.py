@@ -1,5 +1,6 @@
 #! python3.13
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Dict, List, Any
 
 
@@ -30,6 +31,16 @@ class ROLE_TYPE:
     SYSTEM = "system"
     ASSIST = "assistant"
     TOOL = "tool"
+
+
+class ResponseMode(Enum):
+    """回复模式枚举"""
+    NONE = "none"
+    KEYWORD = "keyword"
+    AT = "at"
+    AT_AND_KEYWORD = "at_and_keyword"
+    AI_DECIDE = "ai_decide"
+    RANDOM = "random"
 
 
 @dataclass

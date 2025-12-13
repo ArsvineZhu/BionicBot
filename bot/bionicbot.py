@@ -1,4 +1,4 @@
-# main.py
+# bot/bionicbot.py
 import asyncio
 from ncatbot.core import BotClient, GroupMessageEvent, PrivateMessageEvent
 from ncatbot.utils import get_log

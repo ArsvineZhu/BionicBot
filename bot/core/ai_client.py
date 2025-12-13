@@ -1,11 +1,14 @@
 # core/ai_client.py
 import asyncio
+import re
+import traceback
 from datetime import datetime
 from typing import Dict, Optional, Tuple, List
 from dataclasses import dataclass
 
 from volcenginesdkarkruntime import Ark
 from ncatbot.utils import get_log
+from bot.core.conversation_manager import ConversationManager
 from bot.core.model import Content, Message, ApiModel, ROLE_TYPE, ABILITY, EFFORT
 from bot.core.api_key import get_api_key, get_masked_api_key
 from bot.config.settings import BotSettings
@@ -98,7 +101,6 @@ class AIClient:
             need_system_prompt = True
         else:
             # 2. 新话题检测：检查最近的对话线程是否有新话题
-            from bot.core.conversation_manager import ConversationManager
             thread_id = self.memory_manager.conversation_manager.detect_thread(
                 message, 
                 user_info['user_id'], 
@@ -165,7 +167,6 @@ class AIClient:
                 if memory_content:
                     self.memory_manager.long_term_memory.add_memory(group_id, memory_content)
                     # 从回复中移除标记
-                    import re
                     for pattern in [r"【长期记忆】.+?【/长期记忆】", r"\[长期记忆\].+?\[/长期记忆\]"]:
                         reply_text = re.sub(pattern, "", reply_text, flags=re.DOTALL)
                     reply_text = reply_text.strip()
@@ -188,7 +189,7 @@ class AIClient:
             
         except Exception as e:
             print(f"AI调用失败: {e}")
-            return AIResponse(content="抱歉，我现在无法处理您的请求，请稍后再试。")
+            return AIResponse(content="抱歉，我现在无法处理您的请求，请稍后再试")
     
     async def _fetch_and_integrate_history(self, bot_api, user_info: dict, group_id: Optional[str], conv_key: str):
         """获取并整合历史记录"""
@@ -246,9 +247,6 @@ class AIClient:
                         role = ROLE_TYPE.ASSIST
                     
                     # 构建Message对象，添加时间戳
-                    # 注意：历史消息的时间信息无法获取
-                    # 由于无法获取历史消息的真实时间，我们使用简化的时间格式
-                    # 确定发送者名称
                     # 尝试从event对象获取发送者信息
                     if hasattr(event, 'sender') and hasattr(event.sender, 'nickname'):
                         sender_name = event.sender.nickname
@@ -289,7 +287,6 @@ class AIClient:
                     logger.debug(f"  {i}. {msg.content.msg[:50]}...")
         except Exception as e:
             print(f"获取历史记录失败: {e}")
-            import traceback
             traceback.print_exc()
     
     async def should_respond(
@@ -371,7 +368,7 @@ class AIClient:
         
         # 构建摘要提示词
         summary_prompt = Message(
-            content=Content("你是一个智能对话助手，需要对以下聊天记录进行摘要。请用简洁明了的语言概括聊天的主要内容和关键信息，不要添加任何主观评论或解释。"),
+            content=Content("你是一个智能对话助手，需要对以下聊天记录进行摘要。请用简洁明了的语言概括聊天的主要内容和关键信息，确保可以分清不同用户的发言，不要添加任何主观评论或解释。"),
             role=ROLE_TYPE.SYSTEM
         )
         
@@ -402,7 +399,6 @@ class AIClient:
             return summary
         except Exception as e:
             logger.error(f"生成摘要失败: {e}")
-            import traceback
             traceback.print_exc()
             return ""
     
@@ -414,11 +410,7 @@ class AIClient:
     ) -> AIResponse:
         """获取图片解读的AI响应"""
         try:
-            # 构建用户提问
-            if text_content:
-                user_question = f"请详细解读这张图片，并考虑用户的描述：{text_content}"
-            else:
-                user_question = "请解读这张图片，强调图片表达的情绪或者状态，不要超过50字"
+            user_question = "如果你认为这是一个表情包图片，请解读，并强调其表达的情绪或者状态，不要超过30字；若只是普通图片，请直接解读，不要超过100字"
             
             # 直接调用API，使用图片解读模型
             response = self.client.responses.create(
@@ -452,9 +444,8 @@ class AIClient:
             )
         except Exception as e:
             logger.error(f"图片解读失败: {e}")
-            import traceback
             traceback.print_exc()
-            return AIResponse(content="抱歉，我无法解读这张图片，请稍后再试。")
+            return AIResponse(content="抱歉，我无法解读这张图片，请稍后再试")
     
     def _extract_reply_text(self, response) -> str:
         """从响应中提取回复文本"""

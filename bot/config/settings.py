@@ -167,6 +167,11 @@ DEFAULT_CONFIG = {
     "max_message_length": 2000,
     "enable_at_reply": True,
     
+    # 消息延迟配置
+    "base_delay_seconds": 1.0,
+    "delay_per_character": 1.0,
+    "min_delay_seconds": 0.1,
+    
     # 昵称-称呼映射
     "nickname_address_mapping": {},
     "enable_nickname_address_injection": True,
@@ -293,6 +298,11 @@ class BotSettings:
     MAX_MESSAGE_LENGTH: int = CONFIG.get("max_message_length", DEFAULT_CONFIG["max_message_length"])
     ENABLE_AT_REPLY: bool = CONFIG.get("enable_at_reply", DEFAULT_CONFIG["enable_at_reply"])
     
+    # 消息延迟配置
+    BASE_DELAY_SECONDS: float = CONFIG.get("base_delay_seconds", DEFAULT_CONFIG["base_delay_seconds"])
+    DELAY_PER_CHARACTER: float = CONFIG.get("delay_per_character", DEFAULT_CONFIG["delay_per_character"])
+    MIN_DELAY_SECONDS: float = CONFIG.get("min_delay_seconds", DEFAULT_CONFIG["min_delay_seconds"])
+    
     # 上下文管理配置
     CONTEXT_TIMEOUT_HOURS: int = CONFIG.get("context_timeout_hours", DEFAULT_CONFIG["context_timeout_hours"])
     CONTEXT_SWITCH_THRESHOLD: float = CONFIG.get("context_switch_threshold", DEFAULT_CONFIG["context_switch_threshold"])
@@ -348,7 +358,7 @@ class BotSettings:
         assert cls.RANDOM_THRESHOLD >= 0 and cls.RANDOM_THRESHOLD <= 1, "随机阈值必须在0-1之间"
         
         # 验证回复模式配置
-        from bot.core.tracker import ResponseMode
+        from bot.core.model import ResponseMode
         valid_modes = [mode.value for mode in ResponseMode]
         assert cls.DEFAULT_RESPONSE_MODE in valid_modes, f"默认回复模式必须是以下之一: {', '.join(valid_modes)}"
         

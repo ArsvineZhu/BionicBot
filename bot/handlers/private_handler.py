@@ -1,11 +1,14 @@
 # handlers/private_handler.py
 import asyncio
+import re
+import time
 from ncatbot.core.api import BotAPI
 from ncatbot.core import PrivateMessageEvent, MessageArray
 from ncatbot.core.event.message_segment import Image, Text, PlainText
 from ncatbot.utils import get_log
 from bot.config.settings import BotSettings
 from bot.core.ai_client import AIClient
+from bot.core.model import Message, Content, ROLE_TYPE
 from bot.core.tracker import TargetTracker
 from bot.utils.helpers import get_masked_display_name
 
@@ -89,7 +92,6 @@ class PrivateMessageHandler:
                     formatted_content = f"[{user_info.display_name}发送了图片/表情]解读内容：{ai_response.content}"
                     
                     # 构建系统消息，存入上下文
-                    from bot.core.model import Message, Content, ROLE_TYPE
                     
                     # 生成系统消息
                     system_message = Message(
@@ -128,7 +130,6 @@ class PrivateMessageHandler:
             
             # 处理文本消息
             # 记录API调用开始时间
-            import time
             api_start_time = time.time()
             
             # 获取AI回复
@@ -150,7 +151,6 @@ class PrivateMessageHandler:
                 return False
             
             # 清理AI回复中的@信息（私聊中通常不需要@）
-            import re
             cleaned_content = ai_response.content
             
             # 移除CQ码格式的@
@@ -164,15 +164,8 @@ class PrivateMessageHandler:
             
             # 处理多行消息(\n)
             msgs = cleaned_content.splitlines()
-            
-            # 计算消息总长度
-            total_length = len(ai_response.content)
-            
-            # 计算基础延迟时间 (每字符延迟1秒，基础延迟1秒)
-            base_delay = 1.0 + total_length * 1.0
-            
-            # 减去API调用已经花费的时间，确保延迟不会为负数
-            delay_seconds = max(0.1, base_delay - api_time)
+            # 过滤空行
+            msgs = [msg.strip() for msg in msgs if msg.strip()]
             
             # 发送消息，添加延迟
             for i, msg in enumerate(msgs):
@@ -180,7 +173,20 @@ class PrivateMessageHandler:
                 
                 # 除了最后一行，其他行之间添加延迟
                 if i < len(msgs) - 1:
-                    await asyncio.sleep(delay_seconds / len(msgs))
+                    if i == 0:
+                        # 首条消息：计算总延迟并减去API调用时间
+                        total_length = len(ai_response.content)
+                        # 计算基础延迟时间
+                        base_delay = BotSettings.BASE_DELAY_SECONDS + total_length * BotSettings.DELAY_PER_CHARACTER
+                        # 减去API调用已经花费的时间，确保延迟不会为负数
+                        delay_seconds = max(BotSettings.MIN_DELAY_SECONDS, base_delay - api_time)
+                        await asyncio.sleep(delay_seconds / len(msgs))
+                    else:
+                        # 其他消息：使用单条消息的基础延迟，不减去API时间
+                        msg_length = len(msg)
+                        # 计算当前行的基础延迟
+                        msg_delay = max(BotSettings.MIN_DELAY_SECONDS, BotSettings.BASE_DELAY_SECONDS + msg_length * BotSettings.DELAY_PER_CHARACTER)
+                        await asyncio.sleep(msg_delay)
             
             logger.info(f"[回复] 已发送私聊回复，长度: {len(ai_response.content)}")
             

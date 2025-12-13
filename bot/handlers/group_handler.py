@@ -1,11 +1,14 @@
 # handlers/group_handler.py
 import asyncio
+import re
+import time
 from ncatbot.core.api import BotAPI
 from ncatbot.core import GroupMessageEvent, MessageArray
 from ncatbot.core.event.message_segment import At, Text, Image, PlainText
 from ncatbot.utils import get_log
 
 from bot.core.ai_client import AIClient
+from bot.core.model import Message, Content, ROLE_TYPE
 from bot.core.tracker import TargetTracker
 from bot.config.settings import BotSettings
 from bot.utils.helpers import get_masked_display_name
@@ -55,9 +58,9 @@ class GroupMessageHandler:
             # 兼容旧格式
             cleaned_message = self.tracker.clean_message(event.raw_message)
         
-        # 跳过空消息（除非有图片或被@）
-        if not cleaned_message and not images and not is_at:
-            logger.debug("[调试] 消息为空且未被@，跳过处理")
+        # 跳过空消息（除非有图片）
+        if not cleaned_message and not images:
+            logger.debug("[调试] 消息为空且没有图片，跳过处理")
             return False
         
         # 记录日志
@@ -119,7 +122,6 @@ class GroupMessageHandler:
                     formatted_content = f"[{user_info.display_name}发送了图片/表情]解读内容：{ai_response.content}"
                     
                     # 构建系统消息，存入上下文
-                    from bot.core.model import Message, Content, ROLE_TYPE
                     
                     # 生成系统消息
                     system_message = Message(
@@ -163,7 +165,6 @@ class GroupMessageHandler:
         
         try:
             # 记录API调用开始时间
-            import time
             api_start_time = time.time()
             
             # 获取AI回复
@@ -185,7 +186,6 @@ class GroupMessageHandler:
                 return False
             
             # 清理AI回复中的@信息，避免重复@
-            import re
             cleaned_content = ai_response.content
             
             # 智能清理@信息 - 保留有意义的@，移除重复的@
@@ -205,15 +205,17 @@ class GroupMessageHandler:
             
             # 处理多行消息(\n)
             msgs = cleaned_content.splitlines()
+            # 过滤空行
+            msgs = [msg.strip() for msg in msgs if msg.strip()]
             
             # 计算消息总长度
             total_length = len(cleaned_content)
             
-            # 计算延迟时间 (每字符延迟1秒，基础延迟1秒)
-            base_delay = 1.0 + total_length * 1.0
+            # 计算延迟时间
+            base_delay = BotSettings.BASE_DELAY_SECONDS + total_length * BotSettings.DELAY_PER_CHARACTER
             
             # 减去API调用已经花费的时间，确保延迟不会为负数
-            delay_seconds = max(0.1, base_delay - api_time)
+            delay_seconds = max(BotSettings.MIN_DELAY_SECONDS, base_delay - api_time)
             
             # 发送首行消息（智能@）
             if msgs:
@@ -258,15 +260,21 @@ class GroupMessageHandler:
                 
                 # 发送首行
                 first_line_msg = MessageArray(first_line_segments)
+                await asyncio.sleep(delay_seconds)
                 await bot_api.post_group_array_msg(event.group_id, first_line_msg)
                 
                 # 发送后续行（不带@）
                 for i in range(1, len(msgs)):
+                    # 计算当前行的基础延迟
+                    msg = msgs[i]
+                    msg_length = len(msg)
+                    msg_delay = max(BotSettings.MIN_DELAY_SECONDS, BotSettings.BASE_DELAY_SECONDS + msg_length * BotSettings.DELAY_PER_CHARACTER)
+                    
                     # 添加延迟
-                    await asyncio.sleep(delay_seconds / len(msgs))
+                    await asyncio.sleep(msg_delay)
                     
                     # 构建后续行消息（只包含文本）
-                    next_line_segments = [Text(msgs[i])]
+                    next_line_segments = [Text(msg)]
                     next_line_msg = MessageArray(next_line_segments)
                     await bot_api.post_group_array_msg(event.group_id, next_line_msg)
             

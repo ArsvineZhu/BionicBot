@@ -8,6 +8,7 @@ import hashlib
 import re
 
 from ncatbot.utils import get_log
+from bot.utils.helpers import mask_sensitive_data
 from bot.config.settings import BotSettings
 from bot.core.model import Content, Message, ROLE_TYPE
 from bot.core.conversation_manager import ConversationManager, ConversationThread
@@ -104,7 +105,6 @@ class LongTermMemory:
     @staticmethod
     def extract_memory_tags(text: str) -> Optional[str]:
         """提取长期记忆标记"""
-        import re
 
         patterns = [
             r"【长期记忆】(.+?)【/长期记忆】",
@@ -324,19 +324,16 @@ class MemoryManager:
 
     def build_system_prompt(self, key: str, is_group: bool = True) -> Message:
         """构建系统提示词"""
-        from bot.config.settings import BotSettings
-        from bot.utils.helpers import mask_sensitive_data
-
         # 读取灵魂文档
         try:
             with open(BotSettings.SOUL_DOC_PATH, "r", encoding="utf-8") as f:
                 soul_content = f.read()
         except FileNotFoundError:
-            print("[WARN] 灵魂文档未找到，使用默认描述")
+            logger.warning("灵魂文档未找到，使用默认描述")
             soul_content = f"你是一个名为Bionic的AI助手，乐于助人且知识渊博。"
 
-        # 基础系统提示（移除时间信息，改为在每条消息前添加）
-        base_content = f"""{soul_content}"""
+        # 基础系统提示（原本有时间，改为每条消息提供）
+        base_content = soul_content
 
         # 构建昵称-地址映射表内容
         nickname_address_content = ""
