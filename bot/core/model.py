@@ -18,7 +18,7 @@ class ABILITY:
 
 @dataclass(frozen=True)
 class EFFORT:
-    MINIAML = "minimal"
+    MINIMAL = "minimal"
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"

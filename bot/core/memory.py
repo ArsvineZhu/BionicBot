@@ -152,12 +152,14 @@ class MemoryManager:
             conv.summary = summary
             conv.last_summarized = datetime.now()
             logger.info(f"成功生成对话摘要: {key}")
+            logger.debug(f"摘要内容: {summary}")
             return summary
         
         return None
     
     async def check_and_generate_summaries(self, ai_client):
         """检查并生成所有需要的对话摘要"""
+        logger.info("开始检查并生成对话摘要")
         for key, conv in self.conversations.items():
             # 检查是否需要生成摘要：
             # 1. 没有摘要
@@ -165,16 +167,29 @@ class MemoryManager:
             # 3. 消息数量超过指定数量且距离上次生成摘要超过指定分钟数
             need_summary = False
             time_since_last = datetime.now() - conv.last_summarized
+            message_count = len(conv.global_messages)
+            
+            logger.debug(f"检查对话 {key}: 消息数量={message_count}, 上次摘要时间={time_since_last}")
             
             if not conv.summary:
                 need_summary = True
+                logger.debug(f"对话 {key}: 需要生成摘要，原因: 没有现有摘要")
             elif time_since_last > timedelta(hours=BotSettings.SUMMARY_INTERVAL_HOURS):
                 need_summary = True
-            elif len(conv.global_messages) > BotSettings.SUMMARY_MAX_MESSAGES and time_since_last > timedelta(minutes=BotSettings.SUMMARY_SHORT_INTERVAL_MINUTES):
+                logger.debug(f"对话 {key}: 需要生成摘要，原因: 距离上次摘要已超过 {BotSettings.SUMMARY_INTERVAL_HOURS} 小时")
+            elif message_count > BotSettings.SUMMARY_MAX_MESSAGES and time_since_last > timedelta(minutes=BotSettings.SUMMARY_SHORT_INTERVAL_MINUTES):
                 need_summary = True
+                logger.debug(f"对话 {key}: 需要生成摘要，原因: 消息数量({message_count})超过限制，且距离上次摘要已超过 {BotSettings.SUMMARY_SHORT_INTERVAL_MINUTES} 分钟")
             
             if need_summary:
-                await self.generate_conversation_summary(key, ai_client)
+                logger.info(f"开始生成对话 {key} 的摘要")
+                result = await self.generate_conversation_summary(key, ai_client)
+                if result:
+                    logger.info(f"对话 {key} 摘要生成完成")
+                else:
+                    logger.warning(f"对话 {key} 摘要生成失败")
+        
+        logger.info("所有对话摘要检查和生成完成")
     
     def cleanup_expired_contexts(self):
         """清理过期上下文"""
@@ -243,10 +258,11 @@ class MemoryManager:
         # 添加到全局消息列表
         conv.global_messages.append(message)
         conv.last_active = datetime.now()
-
+        
         # 限制全局消息数量
         if len(conv.global_messages) > BotSettings.SHORT_TERM_MEMORY_LIMIT:
             conv.global_messages = conv.global_messages[-BotSettings.SHORT_TERM_MEMORY_LIMIT :]
+            logger.debug(f"上下文消息数量超过限制，已截取最近{BotSettings.SHORT_TERM_MEMORY_LIMIT}条消息")
         
         # 如果提供了user_id，添加到用户特定上下文
         if user_id:
@@ -325,8 +341,13 @@ class MemoryManager:
         # 构建昵称-地址映射表内容
         nickname_address_content = ""
         if BotSettings.ENABLE_NICKNAME_ADDRESS_INJECTION and BotSettings.NICKNAME_ADDRESS_MAPPING:
-            nickname_address_content = "\n\n用户昵称-称呼映射表（请在回复中参考使用）:"
-            for nickname, address in BotSettings.NICKNAME_ADDRESS_MAPPING.items():
+            nickname_address_content = "\n\n用户【昵称】-【称呼】映射表（请在回复中参考使用，格式为【昵称】:【称呼】，同一个人可以有多个昵称，但你应当只用【称呼】指代）:"
+            for nickname, mapping in BotSettings.NICKNAME_ADDRESS_MAPPING.items():
+                # 处理两种格式：字符串或字典
+                if isinstance(mapping, dict):
+                    address = mapping.get("address", "")
+                else:
+                    address = mapping
                 nickname_address_content += f"\n- {nickname}: {address}"
 
         # 根据配置的位置注入映射表

@@ -1,5 +1,10 @@
 #! python3.13
-# import os
+import sys
+import os
+
+# Add project root to Python path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+
 from bot.core.api_key import API_KEY
 from volcenginesdkarkruntime import Ark
 from bot.core.model import Content, Message, ApiModel, ROLE_TYPE, ABILITY
@@ -13,7 +18,7 @@ client = Ark(
 )
 
 # 加载身份文件
-with open(r".\soul_doc\yuki.md", "r", encoding="utf-8") as file:
+with open(r".\bot\config\soul_doc\yuki.md", "r", encoding="utf-8") as file:
     soul = file.read()
 
 # 注入系统提示词
@@ -39,9 +44,9 @@ while True:
         MODEL,
         [] if response_id else [sys_msg] + [user_msg],
         response_id,
-        thinking=ABILITY.AUTO,
-        temperature=1,
-    ).export(False)
+        thinking=ABILITY.ENABLED,
+        temperature=0.8,
+    ).export
 
     response = client.responses.create(**apimodel)
     response_id = response.id  # type: ignore

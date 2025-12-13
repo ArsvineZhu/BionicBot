@@ -96,11 +96,17 @@ DEFAULT_CONFIG = {
     "summary_enabled": True,
     "summary_model": "doubao-seed-1-6-flash-250828",
     "summary_temperature": 0.1,
-    "summary_min_messages": 10,
-    "summary_max_messages": 50,
-    "summary_interval_hours": 1,
-    "summary_short_interval_minutes": 30,
-    "summary_check_frequency": 10,
+    "summary_min_messages": 50,
+    "summary_max_messages": 100,
+    "summary_interval_hours": 2,
+    "summary_short_interval_minutes": 60,
+    "summary_check_frequency": 50,
+    
+    # 图片解读配置
+    "image_model": "doubao-seed-1-6-flash-250828",
+    "image_reasoning": "MINIMAL",
+    "image_temperature": 0.6,
+    "image_max_tokens": 200,
     
     # 记忆配置
     "short_term_memory_limit": 30,
@@ -248,6 +254,12 @@ class BotSettings:
     SUMMARY_SHORT_INTERVAL_MINUTES: int = CONFIG.get("summary_short_interval_minutes", DEFAULT_CONFIG["summary_short_interval_minutes"])
     SUMMARY_CHECK_FREQUENCY: int = CONFIG.get("summary_check_frequency", DEFAULT_CONFIG["summary_check_frequency"])
     
+    # 图片解读配置
+    IMAGE_MODEL: str = CONFIG.get("image_model", DEFAULT_CONFIG["image_model"])
+    IMAGE_REASONING: str = CONFIG.get("image_reasoning", DEFAULT_CONFIG["image_reasoning"])
+    IMAGE_TEMPERATURE: float = CONFIG.get("image_temperature", DEFAULT_CONFIG["image_temperature"])
+    IMAGE_MAX_TOKENS: Optional[int] = CONFIG.get("image_max_tokens", DEFAULT_CONFIG["image_max_tokens"])
+    
     # AI决策提示词配置
     SHOULD_RESPOND_PROMPT_PATH: str = CONFIG.get("should_respond_prompt_path", DEFAULT_CONFIG["should_respond_prompt_path"])
     SHOULD_RESPOND_PROMPT: str = _load_prompt_from_file(SHOULD_RESPOND_PROMPT_PATH)
@@ -317,13 +329,16 @@ class BotSettings:
     
     # 昵称-称呼映射表配置
     # 昵称-称呼映射表，用于在系统提示中注入用户昵称和对应的称呼信息
-    NICKNAME_ADDRESS_MAPPING: Dict[str, str] = CONFIG.get("nickname_address_mapping", DEFAULT_CONFIG["nickname_address_mapping"])
+    # 支持两种格式：
+    # 1. 简单格式：{"昵称": "称呼"} - 仅用于称呼转换
+    # 2. 高级格式：{"昵称": {"address": "称呼", "qq": "123456"}} - 同时支持称呼转换和@功能
+    NICKNAME_ADDRESS_MAPPING: Dict[str, Any] = CONFIG.get("nickname_address_mapping", DEFAULT_CONFIG["nickname_address_mapping"])
     # 是否启用昵称-称呼映射表注入
     ENABLE_NICKNAME_ADDRESS_INJECTION: bool = CONFIG.get("enable_nickname_address_injection", DEFAULT_CONFIG["enable_nickname_address_injection"])
     # 昵称-称呼映射表在系统提示中的注入位置
     # 可选值：top（顶部）、bottom（底部）
     NICKNAME_ADDRESS_INJECTION_POSITION: str = CONFIG.get("nickname_address_injection_position", DEFAULT_CONFIG["nickname_address_injection_position"])
-
+    
     
     @classmethod
     def validate_config(cls):
@@ -350,9 +365,21 @@ class BotSettings:
         assert isinstance(cls.NICKNAME_ADDRESS_MAPPING, dict), "昵称-地址映射表必须是字典类型"
         for key, value in cls.NICKNAME_ADDRESS_MAPPING.items():
             assert isinstance(key, str), f"昵称-地址映射表的键（{key}）必须是字符串类型"
-            assert isinstance(value, str), f"昵称-地址映射表的值（{value}）必须是字符串类型"
             assert key.strip(), f"昵称-地址映射表的键（{key}）不能为空字符串"
-            assert value.strip(), f"昵称-地址映射表的值（{value}）不能为空字符串"
+            
+            # 支持两种格式：字符串或字典
+            if isinstance(value, str):
+                assert value.strip(), f"昵称-地址映射表的值（{value}）不能为空字符串"
+            elif isinstance(value, dict):
+                # 字典格式必须包含address字段
+                assert "address" in value, f"昵称-地址映射表的字典格式必须包含address字段: {key}"
+                assert isinstance(value["address"], str), f"address字段必须是字符串类型: {key}"
+                assert value["address"].strip(), f"address字段不能为空字符串: {key}"
+                # qq字段是可选的，但如果存在必须是字符串
+                if "qq" in value:
+                    assert isinstance(value["qq"], str), f"qq字段必须是字符串类型: {key}"
+            else:
+                assert False, f"昵称-地址映射表的值必须是字符串或字典类型，当前类型: {type(value).__name__}"
         
         assert isinstance(cls.ENABLE_NICKNAME_ADDRESS_INJECTION, bool), "enable_nickname_address_injection必须是布尔类型"
         assert cls.NICKNAME_ADDRESS_INJECTION_POSITION in ["top", "bottom"], "nickname_address_injection_position必须是'top'或'bottom'"

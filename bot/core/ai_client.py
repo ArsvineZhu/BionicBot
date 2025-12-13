@@ -129,13 +129,16 @@ class AIClient:
                 await self.memory_manager.check_and_generate_summaries(self)
         
         # 构建API请求
+        # 只在支持的情况下使用reasoning参数
+        reasoning_value = getattr(EFFORT, BotSettings.REASONING, EFFORT.MEDIUM) if BotSettings.REASONING_AVAILABLE else EFFORT.MEDIUM
+        
         apimodel = ApiModel(
             model=BotSettings.MODEL,
             messages=messages,
             previous_response_id=conv.response_id,
             thinking=ABILITY.ENABLED,
             temperature=BotSettings.TEMPERATURE,
-            reasoning=getattr(EFFORT, BotSettings.REASONING, EFFORT.MEDIUM),
+            reasoning=reasoning_value,
             caching=BotSettings.CACHE,
             max_tokens=BotSettings.MAX_TOKENS,
             top_p=BotSettings.TOP_P,
@@ -277,7 +280,13 @@ class AIClient:
             # 在获取历史记录后生成对话摘要
             await self.memory_manager.generate_conversation_summary(conv_key, self)
             
-            print(f"成功获取并整合{len(filtered_messages)}条历史记录到上下文")
+            logger.info(f"成功获取并整合{len(filtered_messages)}条历史记录到上下文")
+            
+            # 记录整合的历史记录内容
+            if filtered_messages:
+                logger.debug("整合的历史记录内容:")
+                for i, msg in enumerate(filtered_messages, 1):
+                    logger.debug(f"  {i}. {msg.content.msg[:50]}...")
         except Exception as e:
             print(f"获取历史记录失败: {e}")
             import traceback
@@ -316,12 +325,15 @@ class AIClient:
         messages = [decision_prompt] + conversation_history[-limit:] + [user_msg]
         
         # 构建API请求
+        # 只在支持的情况下使用reasoning参数
+        reasoning_value = getattr(EFFORT, BotSettings.DECISION_REASONING, EFFORT.MINIMAL) if BotSettings.DECISION_REASONING_AVAILABLE else EFFORT.MEDIUM
+        
         apimodel = ApiModel(
             model=BotSettings.DECISION_MODEL,
             messages=messages,
             thinking=ABILITY.DISABLED,  # 不需要思考过程
             temperature=BotSettings.DECISION_TEMPERATURE,  # 确定性输出
-            reasoning=getattr(EFFORT, BotSettings.DECISION_REASONING, EFFORT.MINIMAL),
+            reasoning=reasoning_value,
             caching=BotSettings.DECISION_CACHE,
             max_tokens=BotSettings.DECISION_MAX_TOKENS,
             top_p=BotSettings.DECISION_TOP_P,
@@ -347,7 +359,15 @@ class AIClient:
         """生成聊天信息摘要"""
         # 如果摘要系统未启用，返回空字符串
         if not BotSettings.SUMMARY_ENABLED:
+            logger.debug("摘要系统未启用，跳过摘要生成")
             return ""
+        
+        logger.info(f"开始生成摘要，输入消息数量: {len(messages)}")
+        
+        # 记录输入消息内容
+        logger.debug("输入摘要的消息内容:")
+        for i, msg in enumerate(messages, 1):
+            logger.debug(f"  {i}. {msg.content.msg[:50]}...")
         
         # 构建摘要提示词
         summary_prompt = Message(
@@ -375,10 +395,66 @@ class AIClient:
             
             # 提取回复内容
             summary = self._extract_reply_text(response).strip()
+            
+            logger.info(f"摘要生成完成，摘要长度: {len(summary)}")
+            logger.debug(f"生成的摘要: {summary}")
+            
             return summary
         except Exception as e:
             logger.error(f"生成摘要失败: {e}")
+            import traceback
+            traceback.print_exc()
             return ""
+    
+    async def get_image_response(
+        self,
+        image_url: str,
+        text_content: str = "",
+        user_info: dict = None
+    ) -> AIResponse:
+        """获取图片解读的AI响应"""
+        try:
+            # 构建用户提问
+            if text_content:
+                user_question = f"请详细解读这张图片，并考虑用户的描述：{text_content}"
+            else:
+                user_question = "请解读这张图片，强调图片表达的情绪或者状态，不要超过50字"
+            
+            # 直接调用API，使用图片解读模型
+            response = self.client.responses.create(
+                model=BotSettings.IMAGE_MODEL,
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_image",
+                                "image_url": image_url
+                            },
+                            {
+                                "type": "input_text",
+                                "text": user_question
+                            },
+                        ],
+                    }
+                ]
+            )
+            
+            # 提取AI回复
+            reply_text = self._extract_reply_text(response)
+            
+            if not reply_text:
+                raise ValueError("无法提取AI回复内容")
+            
+            return AIResponse(
+                content=reply_text,
+                response_id=getattr(response, 'id', None)
+            )
+        except Exception as e:
+            logger.error(f"图片解读失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return AIResponse(content="抱歉，我无法解读这张图片，请稍后再试。")
     
     def _extract_reply_text(self, response) -> str:
         """从响应中提取回复文本"""
