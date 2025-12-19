@@ -107,6 +107,8 @@ DEFAULT_CONFIG = {
     "image_reasoning": "MINIMAL",
     "image_temperature": 0.6,
     "image_max_tokens": 200,
+    "enable_image_interpretation": True,  # 是否启用图片解读
+    "image_interpretation_probability": 1.0,  # 图片解读的概率 (0.0-1.0)，1.0表示总是解读
     
     # 记忆配置
     "short_term_memory_limit": 30,
@@ -128,10 +130,6 @@ DEFAULT_CONFIG = {
     "context_switch_analyze_count": 3,
     "context_related_response_enabled": True,
     "context_related_timeout_minutes": 5,
-    
-    # 话题检测
-    "topic_relevance_threshold": 0.3,
-    "topic_detection_interval": 5,
     
     # 对话线程
     "thread_timeout_minutes": 60,
@@ -166,6 +164,8 @@ DEFAULT_CONFIG = {
     # 消息处理
     "max_message_length": 2000,
     "enable_at_reply": True,
+    # 日志配置
+    "log_max_length": 30,  # 日志输出最大长度，超过该长度用...省略
     
     # 消息延迟配置
     "base_delay_seconds": 1.0,
@@ -185,6 +185,7 @@ DEFAULT_CONFIG = {
     "napcat_ws_uri": "ws://localhost:3001",
     "webui_enabled": False,
     "webui_port": 6099,
+    "language": "en_us",  # 语言配置，如 zh_cn, en_us
     
     # AI决策提示词
     "should_respond_prompt_path": "bot/config/prompt/should_respond_prompt.txt"
@@ -264,6 +265,8 @@ class BotSettings:
     IMAGE_REASONING: str = CONFIG.get("image_reasoning", DEFAULT_CONFIG["image_reasoning"])
     IMAGE_TEMPERATURE: float = CONFIG.get("image_temperature", DEFAULT_CONFIG["image_temperature"])
     IMAGE_MAX_TOKENS: Optional[int] = CONFIG.get("image_max_tokens", DEFAULT_CONFIG["image_max_tokens"])
+    ENABLE_IMAGE_INTERPRETATION: bool = CONFIG.get("enable_image_interpretation", DEFAULT_CONFIG["enable_image_interpretation"])
+    IMAGE_INTERPRETATION_PROBABILITY: float = CONFIG.get("image_interpretation_probability", DEFAULT_CONFIG["image_interpretation_probability"])
     
     # AI决策提示词配置
     SHOULD_RESPOND_PROMPT_PATH: str = CONFIG.get("should_respond_prompt_path", DEFAULT_CONFIG["should_respond_prompt_path"])
@@ -297,6 +300,8 @@ class BotSettings:
     # 消息处理
     MAX_MESSAGE_LENGTH: int = CONFIG.get("max_message_length", DEFAULT_CONFIG["max_message_length"])
     ENABLE_AT_REPLY: bool = CONFIG.get("enable_at_reply", DEFAULT_CONFIG["enable_at_reply"])
+    # 日志配置
+    LOG_MAX_LENGTH: int = CONFIG.get("log_max_length", DEFAULT_CONFIG["log_max_length"])
     
     # 消息延迟配置
     BASE_DELAY_SECONDS: float = CONFIG.get("base_delay_seconds", DEFAULT_CONFIG["base_delay_seconds"])
@@ -308,10 +313,6 @@ class BotSettings:
     CONTEXT_SWITCH_THRESHOLD: float = CONFIG.get("context_switch_threshold", DEFAULT_CONFIG["context_switch_threshold"])
     CONTEXT_SWITCH_MIN_MESSAGES: int = CONFIG.get("context_switch_min_messages", DEFAULT_CONFIG["context_switch_min_messages"])
     CONTEXT_SWITCH_ANALYZE_COUNT: int = CONFIG.get("context_switch_analyze_count", DEFAULT_CONFIG["context_switch_analyze_count"])
-    
-    # 话题检测配置
-    TOPIC_RELEVANCE_THRESHOLD: float = CONFIG.get("topic_relevance_threshold", DEFAULT_CONFIG["topic_relevance_threshold"])
-    TOPIC_DETECTION_INTERVAL: int = CONFIG.get("topic_detection_interval", DEFAULT_CONFIG["topic_detection_interval"])  # 每N条消息更新一次话题
     
     # 长期记忆配置
     LONG_TERM_MEMORY_LIMIT: int = CONFIG.get("long_term_memory_limit", DEFAULT_CONFIG["long_term_memory_limit"])
@@ -349,6 +350,17 @@ class BotSettings:
     # 可选值：top（顶部）、bottom（底部）
     NICKNAME_ADDRESS_INJECTION_POSITION: str = CONFIG.get("nickname_address_injection_position", DEFAULT_CONFIG["nickname_address_injection_position"])
     
+    # 系统配置
+    LOG_LEVEL: str = CONFIG.get("log_level", DEFAULT_CONFIG["log_level"])
+    DEBUG: bool = CONFIG.get("debug", DEFAULT_CONFIG["debug"])
+    ENABLE_PLUGINS: bool = CONFIG.get("enable_plugins", DEFAULT_CONFIG["enable_plugins"])
+    NAPCAT_ENABLED: bool = CONFIG.get("napcat_enabled", DEFAULT_CONFIG["napcat_enabled"])
+    NAPCAT_WS_URI: str = CONFIG.get("napcat_ws_uri", DEFAULT_CONFIG["napcat_ws_uri"])
+    WEBUI_ENABLED: bool = CONFIG.get("webui_enabled", DEFAULT_CONFIG["webui_enabled"])
+    WEBUI_PORT: int = CONFIG.get("webui_port", DEFAULT_CONFIG["webui_port"])
+    # 语言配置
+    LANGUAGE: str = CONFIG.get("language", DEFAULT_CONFIG["language"])
+    
     
     @classmethod
     def validate_config(cls):
@@ -371,25 +383,33 @@ class BotSettings:
         assert isinstance(cls.CONTEXT_RELATED_RESPONSE_ENABLED, bool), "上下文相关响应开关必须是布尔类型"
         assert cls.CONTEXT_RELATED_TIMEOUT_MINUTES > 0, "上下文相关响应超时时间必须大于0"
         
+        # 验证图片解读配置
+        assert isinstance(cls.ENABLE_IMAGE_INTERPRETATION, bool), "图片解读开关必须是布尔类型"
+        assert cls.IMAGE_INTERPRETATION_PROBABILITY >= 0 and cls.IMAGE_INTERPRETATION_PROBABILITY <= 1, "图片解读概率必须在0-1之间"
+        
         # 验证昵称-地址映射表配置
         assert isinstance(cls.NICKNAME_ADDRESS_MAPPING, dict), "昵称-地址映射表必须是字典类型"
-        for key, value in cls.NICKNAME_ADDRESS_MAPPING.items():
-            assert isinstance(key, str), f"昵称-地址映射表的键（{key}）必须是字符串类型"
-            assert key.strip(), f"昵称-地址映射表的键（{key}）不能为空字符串"
+        for address, mapping in cls.NICKNAME_ADDRESS_MAPPING.items():
+            assert isinstance(address, str), f"昵称-地址映射表的键（{address}）必须是字符串类型"
+            assert address.strip(), f"昵称-地址映射表的键（{address}）不能为空字符串"
             
-            # 支持两种格式：字符串或字典
-            if isinstance(value, str):
-                assert value.strip(), f"昵称-地址映射表的值（{value}）不能为空字符串"
-            elif isinstance(value, dict):
-                # 字典格式必须包含address字段
-                assert "address" in value, f"昵称-地址映射表的字典格式必须包含address字段: {key}"
-                assert isinstance(value["address"], str), f"address字段必须是字符串类型: {key}"
-                assert value["address"].strip(), f"address字段不能为空字符串: {key}"
-                # qq字段是可选的，但如果存在必须是字符串
-                if "qq" in value:
-                    assert isinstance(value["qq"], str), f"qq字段必须是字符串类型: {key}"
-            else:
-                assert False, f"昵称-地址映射表的值必须是字符串或字典类型，当前类型: {type(value).__name__}"
+            # 新格式：必须是字典类型
+            assert isinstance(mapping, dict), f"昵称-地址映射表的值必须是字典类型，当前类型: {type(mapping).__name__}"
+            
+            # 字典格式必须包含nicknames字段
+            assert "nicknames" in mapping, f"昵称-地址映射表的字典格式必须包含nicknames字段: {address}"
+            assert isinstance(mapping["nicknames"], list), f"nicknames字段必须是列表类型: {address}"
+            assert len(mapping["nicknames"]) > 0, f"nicknames列表不能为空: {address}"
+            
+            # 验证nicknames列表中的每个元素
+            for nickname in mapping["nicknames"]:
+                assert isinstance(nickname, str), f"nicknames列表中的元素必须是字符串类型，当前类型: {type(nickname).__name__}: {address}"
+                assert nickname.strip(), f"nicknames列表中的元素不能为空字符串: {address}"
+            
+            # qq字段是可选的，但如果存在必须是字符串
+            if "qq" in mapping:
+                assert isinstance(mapping["qq"], str), f"qq字段必须是字符串类型: {address}"
+                assert mapping["qq"].strip(), f"qq字段不能为空字符串: {address}"
         
         assert isinstance(cls.ENABLE_NICKNAME_ADDRESS_INJECTION, bool), "enable_nickname_address_injection必须是布尔类型"
         assert cls.NICKNAME_ADDRESS_INJECTION_POSITION in ["top", "bottom"], "nickname_address_injection_position必须是'top'或'bottom'"

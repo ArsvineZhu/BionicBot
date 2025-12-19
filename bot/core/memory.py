@@ -281,17 +281,7 @@ class MemoryManager:
             if len(user_context.messages) > BotSettings.SHORT_TERM_MEMORY_LIMIT:
                 user_context.messages = user_context.messages[-BotSettings.SHORT_TERM_MEMORY_LIMIT :]
         
-        # 对话线程管理
-        if key.startswith("group_"):
-            # 为群聊添加消息到对话线程
-            message_text = message.content.content if hasattr(message, 'content') and hasattr(message.content, 'content') else ""
-            thread_id = self.conversation_manager.detect_thread(message_text, user_id, conv.global_messages)
-            thread = self.conversation_manager.get_or_create_thread(thread_id)
-            thread.add_message(message, user_id)
-            
-            # 更新线程话题
-            if not thread.topic or len(thread.messages) % BotSettings.TOPIC_DETECTION_INTERVAL == 0:  # 每N条消息更新一次话题
-                thread.topic = self.conversation_manager.analyze_topic(thread)
+
 
     def get_messages(self, key: str, limit: int = None, user_id: str = None) -> List[Message]:  # type: ignore
         """获取对话消息，支持获取全局消息或用户特定消息，当有摘要时使用摘要+最近消息来减少tokens消耗"""
@@ -330,22 +320,22 @@ class MemoryManager:
                 soul_content = f.read()
         except FileNotFoundError:
             logger.warning("灵魂文档未找到，使用默认描述")
-            soul_content = f"你是一个名为Bionic的AI助手，乐于助人且知识渊博。"
+            soul_content = f"你是一个名为 Bionic 的 AI 助手，乐于助人且知识渊博。"
 
         # 基础系统提示（原本有时间，改为每条消息提供）
         base_content = soul_content
 
-        # 构建昵称-地址映射表内容
+        # 构建昵称映射表内容
         nickname_address_content = ""
         if BotSettings.ENABLE_NICKNAME_ADDRESS_INJECTION and BotSettings.NICKNAME_ADDRESS_MAPPING:
-            nickname_address_content = "\n\n用户【昵称】-【称呼】映射表（请在回复中参考使用，格式为【昵称】:【称呼】，同一个人可以有多个昵称，但你应当只用【称呼】指代）:"
-            for nickname, mapping in BotSettings.NICKNAME_ADDRESS_MAPPING.items():
-                # 处理两种格式：字符串或字典
-                if isinstance(mapping, dict):
-                    address = mapping.get("address", "")
-                else:
-                    address = mapping
-                nickname_address_content += f"\n- {nickname}: {address}"
+            nickname_address_content += "\n## 以下是多个用户的【称呼】与其【昵称】，请在回复中参考，用【称呼】来指代该用户："
+            for address, mapping in BotSettings.NICKNAME_ADDRESS_MAPPING.items():
+                # 处理新格式：称呼 -> {nicknames: [], qq: ""}
+                if isinstance(mapping, dict) and "nicknames" in mapping:
+                    nicknames = mapping["nicknames"]
+                    # 格式化显示：【称呼】：昵称1, 昵称2, 昵称3
+                    nicknames_str = ", ".join(nicknames)
+                    nickname_address_content += f"\n* 【{address}】: {nicknames_str};"
 
         # 根据配置的位置注入映射表
         system_content = ""
@@ -362,12 +352,12 @@ class MemoryManager:
             group_id = key.replace("group_", "")
             long_memories = self.long_term_memory.get_memory(group_id, limit=BotSettings.LONG_TERM_MEMORY_LIMIT)
             if long_memories:
-                system_content += "\n\n长期记忆（重要信息，请记住）:"
-                for i, memory in enumerate(long_memories, 1):
+                system_content += "\n## 记忆内容:"
+                for i, memory in enumerate[str](long_memories, 1):
                     # 掩码处理记忆中的敏感数据
                     masked_memory = mask_sensitive_data(memory)
                     system_content += f"\n{i}. {masked_memory}"
 
-        system_content += """\n如果有需要长期记住的信息，请在回复中使用【长期记忆】内容【/长期记忆】格式标记"""
+        system_content += """\n如果有需要长期记住的信息，请在回复中使用“【长期记忆】内容【/长期记忆】“的格式标记"""
 
         return Message(content=Content(system_content), role=ROLE_TYPE.SYSTEM)

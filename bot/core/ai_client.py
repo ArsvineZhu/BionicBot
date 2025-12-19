@@ -13,6 +13,7 @@ from bot.core.model import Content, Message, ApiModel, ROLE_TYPE, ABILITY, EFFOR
 from bot.core.api_key import get_api_key, get_masked_api_key
 from bot.config.settings import BotSettings
 from bot.core.memory import MemoryManager
+from bot.core.language_manager import language_manager
 
 logger = get_log("AIClient")
 
@@ -75,13 +76,13 @@ class AIClient:
                     conv_key=conv_key
                 )
             except Exception as e:
-                print(f"获取历史记录失败: {e}")
+                logger.error(language_manager.get("error.history_retrieval_failed", error=str(e)))
         
         # 构建用户消息，优先使用群昵称（card）而非用户名（nickname）
         display_name = user_info.get('card', '') or user_info.get('nickname', '未知用户')
         # 不要在用户消息中包含真实ID，避免泄露隐私
-        # 添加时间戳，格式：25年22:45
-        current_time = datetime.now().strftime('%y年%H:%M')
+        # 添加时间戳，格式：2025-12-19/22:45
+        current_time = datetime.now().strftime('%Y-%m-%d/%H:%M')
         user_message = Message(
             content=Content(f"{display_name}[{current_time}]: {message}"),
             role=ROLE_TYPE.USER
@@ -93,36 +94,10 @@ class AIClient:
         # 获取对话历史
         history_messages = self.memory_manager.get_messages(conv_key, limit=10)
         
-        # 检测是否需要添加系统提示词：仅在新建对话或新话题时添加
-        need_system_prompt = False
-        
-        # 1. 新建对话：如果没有历史消息，需要系统提示词
-        if not history_messages:
-            need_system_prompt = True
-        else:
-            # 2. 新话题检测：检查最近的对话线程是否有新话题
-            thread_id = self.memory_manager.conversation_manager.detect_thread(
-                message, 
-                user_info['user_id'], 
-                self.memory_manager.get_conversation(conv_key).global_messages
-            )
-            thread = self.memory_manager.conversation_manager.get_or_create_thread(thread_id)
-            
-            # 如果是新创建的线程或者话题发生了变化，需要系统提示词
-            if len(thread.messages) <= 1 or hasattr(thread, 'topic_just_changed') and thread.topic_just_changed:
-                need_system_prompt = True
-                # 重置话题变化标记
-                if hasattr(thread, 'topic_just_changed'):
-                    thread.topic_just_changed = False
-        
-        # 构建请求消息
-        if need_system_prompt:
-            # 构建系统提示词
-            system_message = self.memory_manager.build_system_prompt(conv_key, is_group)
-            messages = [system_message] + history_messages
-        else:
-            # 不需要系统提示词，直接使用历史消息
-            messages = history_messages
+        # 构建请求消息：每次对话前都添加系统提示词
+        # 构建系统提示词
+        system_message = self.memory_manager.build_system_prompt(conv_key, is_group)
+        messages = [system_message] + history_messages
         
         # 定期检查并生成对话摘要（每N条消息检查一次，N由配置指定）
         if BotSettings.SUMMARY_ENABLED:
@@ -172,8 +147,8 @@ class AIClient:
                     reply_text = reply_text.strip()
             
             # 添加AI回复到记忆
-            # 添加时间戳，格式：25年22:45
-            current_time = datetime.now().strftime('%y年%H:%M')
+            # 添加时间戳，格式：2025-12-19/22:45
+            current_time = datetime.now().strftime('%Y-%m-%d/%H:%M')
             ai_message = Message(
                 content=Content(f"{BotSettings.BOT_NAME}[{current_time}]: {reply_text}"),
                 role=ROLE_TYPE.ASSIST
@@ -188,8 +163,8 @@ class AIClient:
             )
             
         except Exception as e:
-            print(f"AI调用失败: {e}")
-            return AIResponse(content="抱歉，我现在无法处理您的请求，请稍后再试")
+            logger.error(language_manager.get("error.ai_call_failed", error=str(e)))
+            return AIResponse(content=language_manager.get("error.ai_unavailable"))
     
     async def _fetch_and_integrate_history(self, bot_api, user_info: dict, group_id: Optional[str], conv_key: str):
         """获取并整合历史记录"""
@@ -216,7 +191,7 @@ class AIClient:
                     # 注意：历史消息的时间信息可能无法获取，使用当前时间或格式化显示
                     # 由于无法获取历史消息的真实时间，我们使用简化的时间格式
                     history_msg = Message(
-                        content=Content(f"{sender_name}[{datetime.now().strftime('%y年%H:%M')}]: {msg_content}"),
+                        content=Content(f"{sender_name}[{datetime.now().strftime('%Y-%m-%d/%H:%M')}]: {msg_content}"),
                         role=ROLE_TYPE.USER
                     )
                     history_messages.append(history_msg)
@@ -278,16 +253,16 @@ class AIClient:
             # 在获取历史记录后生成对话摘要
             await self.memory_manager.generate_conversation_summary(conv_key, self)
             
-            logger.info(f"成功获取并整合{len(filtered_messages)}条历史记录到上下文")
+            logger.info(language_manager.get("info.history_integrated", count=len(filtered_messages)))
             
             # 记录整合的历史记录内容
             if filtered_messages:
-                logger.debug("整合的历史记录内容:")
+                logger.debug(language_manager.get("debug.history_content"))
                 for i, msg in enumerate(filtered_messages, 1):
                     logger.debug(f"  {i}. {msg.content.msg[:50]}...")
         except Exception as e:
-            print(f"获取历史记录失败: {e}")
-            traceback.print_exc()
+                logger.error(language_manager.get("error.history_retrieval_failed", error=str(e)))
+                traceback.print_exc()
     
     async def should_respond(
         self, 
@@ -311,7 +286,7 @@ class AIClient:
         
         # 构建用户消息
         display_name = user_info.get('card', '') or user_info.get('nickname', '未知用户')
-        current_time = datetime.now().strftime('%y年%H:%M')
+        current_time = datetime.now().strftime('%Y-%m-%d/%H:%M')
         user_msg = Message(
             content=Content(f"{display_name}[{current_time}]: {message}"),
             role=ROLE_TYPE.USER
@@ -348,7 +323,7 @@ class AIClient:
             # 返回判断结果
             return reply_text == "YES"
         except Exception as e:
-            logger.error(f"AI回复判断失败: {e}")
+            logger.error(language_manager.get("error.ai_decision_failed", error=str(e)))
             # 失败时默认不回复
             return False
     
@@ -356,13 +331,13 @@ class AIClient:
         """生成聊天信息摘要"""
         # 如果摘要系统未启用，返回空字符串
         if not BotSettings.SUMMARY_ENABLED:
-            logger.debug("摘要系统未启用，跳过摘要生成")
+            logger.debug(language_manager.get("debug.summary_system_disabled"))
             return ""
         
-        logger.info(f"开始生成摘要，输入消息数量: {len(messages)}")
+        logger.info(language_manager.get("info.summary_started", count=len(messages)))
         
         # 记录输入消息内容
-        logger.debug("输入摘要的消息内容:")
+        logger.debug(language_manager.get("debug.summary_input_content"))
         for i, msg in enumerate(messages, 1):
             logger.debug(f"  {i}. {msg.content.msg[:50]}...")
         
@@ -393,12 +368,13 @@ class AIClient:
             # 提取回复内容
             summary = self._extract_reply_text(response).strip()
             
-            logger.info(f"摘要生成完成，摘要长度: {len(summary)}")
-            logger.debug(f"生成的摘要: {summary}")
+            logger.info(language_manager.get("info.summary_completed", length=len(summary)))
+            # 记录摘要内容
+            logger.debug(language_manager.get("debug.summary_content", content=summary))
             
             return summary
         except Exception as e:
-            logger.error(f"生成摘要失败: {e}")
+            logger.error(language_manager.get("error.summary_generation_failed", error=str(e)))
             traceback.print_exc()
             return ""
     
@@ -410,7 +386,7 @@ class AIClient:
     ) -> AIResponse:
         """获取图片解读的AI响应"""
         try:
-            user_question = "如果你认为这是一个表情包图片，请解读，并强调其表达的情绪或者状态，不要超过30字；若只是普通图片，请直接解读，不要超过100字"
+            user_question = "请解读此图片，如果你认为这是一个表情包图片，请强调其表达的情绪或者状态，不要超过30字；若认为只是普通图片，请直接解读内容，不要超过100字"
             
             # 直接调用API，使用图片解读模型
             response = self.client.responses.create(
@@ -443,7 +419,7 @@ class AIClient:
                 response_id=getattr(response, 'id', None)
             )
         except Exception as e:
-            logger.error(f"图片解读失败: {e}")
+            logger.error(language_manager.get("error.image_interpretation_failed", error=str(e)))
             traceback.print_exc()
             return AIResponse(content="抱歉，我无法解读这张图片，请稍后再试")
     
@@ -469,6 +445,6 @@ class AIClient:
                         return choice.message.content.strip()
                             
         except Exception as e:
-            logger.error(f"提取回复失败: {e}")
+            logger.error(language_manager.get("error.response_extraction_failed", error=str(e)))
         
         return "[错误] 无法解析AI回复"

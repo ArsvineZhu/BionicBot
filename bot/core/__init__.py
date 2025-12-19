@@ -5,7 +5,6 @@ from .api_key import API_KEY
 from .conversation_manager import ConversationManager
 from .memory import MemoryManager
 from .model import Message, Content, ApiModel, ROLE_TYPE, ABILITY, EFFORT
-from .topic_detector import TopicDetector
 from .tracker import TargetTracker, ResponseMode, UserInfo
 
 __all__ = [
@@ -25,8 +24,6 @@ __all__ = [
     'ROLE_TYPE',
     'ABILITY',
     'EFFORT',
-    # Topic Detection
-    'TopicDetector',
     # Tracker
     'TargetTracker',
     'ResponseMode',

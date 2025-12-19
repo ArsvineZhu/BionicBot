@@ -10,6 +10,7 @@ from ncatbot.core.event import BaseMessageEvent, GroupMessageEvent, PrivateMessa
 from ncatbot.utils import get_log
 from bot.core.model import Message, ResponseMode
 from bot.config.settings import BotSettings
+from bot.core.language_manager import language_manager
 
 logger = get_log("TargetTracker")
 
@@ -73,37 +74,37 @@ class TargetTracker:
         if is_private:
             decision = self.mode != ResponseMode.NONE
             decision_log["final_decision"] = decision
-            logger.info(f"回复决策: {decision_log}")
+            logger.info(language_manager.get("info.reply_decision", decision=decision_log))
             return decision
         
         # 根据回复模式判断
         if self.mode == ResponseMode.NONE:
             decision_log["final_decision"] = False
-            logger.info(f"回复决策: {decision_log}")
+            logger.info(language_manager.get("info.reply_decision", decision=decision_log))
             return False
         
         elif self.mode == ResponseMode.KEYWORD:
             contains_keyword = self._contains_keyword(message_text)
             decision_log["contains_keyword"] = contains_keyword
             decision_log["final_decision"] = contains_keyword
-            logger.info(f"回复决策: {decision_log}")
+            logger.info(language_manager.get("info.reply_decision", decision=decision_log))
             return contains_keyword
         
         elif self.mode == ResponseMode.AT:
             decision_log["final_decision"] = is_at
-            logger.info(f"回复决策: {decision_log}")
+            logger.info(language_manager.get("info.reply_decision", decision=decision_log))
             return is_at
         
         elif self.mode == ResponseMode.AT_AND_KEYWORD:
             decision = is_at or self._contains_keyword(message_text)
             decision_log["final_decision"] = decision
-            logger.info(f"回复决策: {decision_log}")
+            logger.info(language_manager.get("info.reply_decision", decision=decision_log))
             return decision
         
         elif self.mode == ResponseMode.RANDOM:
             if is_at:
                 decision_log["final_decision"] = True
-                logger.info(f"回复决策: {decision_log}")
+                logger.info(language_manager.get("info.reply_decision", decision=decision_log))
                 return True
             
             random_value = random.random()
@@ -113,15 +114,28 @@ class TargetTracker:
             }
             decision = random_value < BotSettings.RANDOM_THRESHOLD
             decision_log["final_decision"] = decision
-            logger.info(f"回复决策: {decision_log}")
+            logger.info(language_manager.get("info.reply_decision", decision=decision_log))
             return decision
         
         elif self.mode == ResponseMode.AI_DECIDE:
             # 快速判断：如果被@或包含关键词，直接回复
             if is_at or self._contains_keyword(message_text):
                 decision_log["final_decision"] = True
-                logger.info(f"回复决策: {decision_log}")
+                logger.info(language_manager.get("info.reply_decision", decision=decision_log))
                 return True
+            
+            # 添加随机概率控制
+            random_value = random.random()
+            decision_log["random_result"] = {
+                "value": random_value,
+                "threshold": BotSettings.RANDOM_THRESHOLD
+            }
+            
+            # 如果随机值大于阈值，直接返回不回复
+            if random_value >= BotSettings.RANDOM_THRESHOLD:
+                decision_log["final_decision"] = False
+                logger.info(language_manager.get("info.reply_decision", decision=decision_log))
+                return False
             
             # 检查是否有AI客户端，否则使用本地上下文判断
             if ai_client and user_info:
@@ -134,14 +148,14 @@ class TargetTracker:
                 )
                 decision_log["ai_decision"] = ai_decision
                 decision_log["final_decision"] = ai_decision
-                logger.info(f"回复决策: {decision_log}")
+                logger.info(language_manager.get("info.reply_decision", decision=decision_log))
                 return ai_decision
             
             # 备用方案：本地上下文关联判断
             context_related = self._is_context_related(message_text, conversation_history, last_response_time)
             decision_log["context_related"] = context_related
             decision_log["final_decision"] = context_related
-            logger.info(f"回复决策: {decision_log}")
+            logger.info(language_manager.get("info.reply_decision", decision=decision_log))
             return context_related
         
         decision_log["final_decision"] = False

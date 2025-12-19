@@ -11,7 +11,8 @@ from bot.core.ai_client import AIClient
 from bot.core.model import Message, Content, ROLE_TYPE
 from bot.core.tracker import TargetTracker
 from bot.config.settings import BotSettings
-from bot.utils.helpers import get_masked_display_name
+from bot.utils.helpers import get_masked_display_name, format_log_text
+from bot.core.language_manager import language_manager
 
 logger = get_log("GroupHandler")
 
@@ -60,15 +61,15 @@ class GroupMessageHandler:
         
         # 跳过空消息（除非有图片）
         if not cleaned_message and not images:
-            logger.debug("[调试] 消息为空且没有图片，跳过处理")
+            logger.debug(language_manager.get("debug.message_ignored", mode="空消息"))
             return False
         
         # 记录日志
         masked_display_name = get_masked_display_name(user_info.display_name, user_info.user_id)
         if images:
-            logger.info(f"[群聊] {masked_display_name}: 发送了 {len(images)} 张图片")
+            logger.info(language_manager.get("info.group_message_received", user=masked_display_name, message=f"发送了 {len(images)} 张图片"))
         else:
-            logger.info(f"[群聊] {masked_display_name}: {cleaned_message[:50]}...")
+            logger.info(language_manager.get("info.group_message_received", user=masked_display_name, message=format_log_text(cleaned_message, BotSettings.LOG_MAX_LENGTH)))
         
         # 检查是否被@
         is_at = False
@@ -78,38 +79,50 @@ class GroupMessageHandler:
             try:
                 bot_info = await bot_api.get_login_info()
                 self.bot_user_id = str(bot_info.user_id)
-                logger.info(f"重新获取机器人用户ID: {self.bot_user_id}")
+                logger.info(language_manager.get("info.get_bot_info_success", user_id=self.bot_user_id))
             except Exception as e:
-                logger.error(f"获取机器人信息失败: {e}")
+                logger.error(language_manager.get("error.get_bot_info_failed", error=e))
         
         if self.bot_user_id:
             # 优化@判断逻辑
             at_segments = event.message.filter(At)
             at_users = [at.qq for at in at_segments]
-            logger.debug(f"[调试] 消息中的@列表: {at_users}, 机器人ID: {self.bot_user_id}")
+            logger.debug(language_manager.get("debug.at_list_in_message", at_list=at_users, bot_id=self.bot_user_id))
             
             # 精确匹配@机器人
             is_at = any(str(at_qq) == self.bot_user_id for at_qq in at_users)
             
             # 调试信息
             if is_at:
-                logger.debug(f"[调试] 检测到@机器人消息")
+                logger.debug(language_manager.get("debug.at_bot_detected", user=masked_display_name))
             else:
-                logger.debug(f"[调试] 未检测到@机器人消息")
+                logger.debug(language_manager.get("debug.at_bot_not_detected"))
         else:
-            logger.error("[调试] bot_user_id未获取到")
+            logger.error(language_manager.get("error.bot_user_id_not_retrieved"))
         
-        logger.debug(f"[调试] 是否被@: {is_at}, 原始消息: {event.raw_message}")
+        logger.debug(language_manager.get("debug.at_bot_detected", is_at=is_at, raw_message=event.raw_message))
         
         # 优化：处理@机器人但消息为空的情况
         if is_at and not cleaned_message:
-            logger.debug("[调试] 检测到@机器人但消息为空，准备回复")
+            logger.debug(language_manager.get("debug.at_bot_empty_message", user=masked_display_name))
         
         # 处理图片消息
         if images:
             try:
+                # 检查是否启用了图片解读
+                if not BotSettings.ENABLE_IMAGE_INTERPRETATION:
+                    logger.info(language_manager.get("info.image_interpretation_disabled", count=len(images)))
+                    return True
+                
+                # 遍历每张图片
                 for i, img in enumerate(images, 1):
-                    logger.info(f"[群聊] 正在解读图片 {i}: {img['url']}")
+                    # 根据概率决定是否解读该图片
+                    import random
+                    if random.random() > BotSettings.IMAGE_INTERPRETATION_PROBABILITY:
+                        logger.info(language_manager.get("info.image_skipped_by_probability", index=i))
+                        continue
+                    
+                    logger.info(language_manager.get("info.image_interpreting", index=i, url=img['url']))
                     
                     # 获取AI图片解读
                     ai_response = await self.ai_client.get_image_response(
@@ -139,12 +152,12 @@ class GroupMessageHandler:
                         user_id=str(user_info.user_id)
                     )
                     
-                    logger.info(f"[上下文] 已将图片 {i} 的解读结果存入上下文")
+                    logger.info(language_manager.get("info.image_interpretation_stored", index=i))
                 
-                logger.info(f"[处理] 已完成 {len(images)} 张图片的解读和上下文存储")
+                logger.info(language_manager.get("info.image_processing_complete"))
                 return True
             except Exception as e:
-                logger.error(f"处理群图片消息失败: {e}", exc_info=True)
+                logger.error(language_manager.get("error.failed_to_process_group_message", error=e), exc_info=True)
                 return False
         
         # 判断是否需要回复文本消息
@@ -157,11 +170,11 @@ class GroupMessageHandler:
             group_id=user_info.group_id
         )
         
-        logger.debug(f"[调试] 回复判断: {should_reply}, 模式: {self.tracker.mode.value}, 是否被@: {is_at}, 关键词: {self.tracker._contains_keyword(cleaned_message)}")
+        logger.debug(language_manager.get("debug.reply_judgment", should_reply=should_reply, mode=self.tracker.mode.value, is_at=is_at, keyword=self.tracker._contains_keyword(cleaned_message)))
         
         if not should_reply:
-            logger.debug(f"[忽略] 不符合回复条件 - 模式:{self.tracker.mode.value}, 是否被@: {is_at}, 关键词: {self.tracker._contains_keyword(cleaned_message)}")
-            return False
+                logger.debug(language_manager.get("debug.message_ignored", mode=self.tracker.mode.value))
+                return False
         
         try:
             # 记录API调用开始时间
@@ -182,7 +195,7 @@ class GroupMessageHandler:
             api_time = api_end_time - api_start_time
             
             if not ai_response.content or ai_response.content.startswith("[错误]"):
-                logger.error(f"AI回复失败: {ai_response.content}")
+                logger.error(language_manager.get("error.ai_reply_failed", content=ai_response.content))
                 return False
             
             # 清理AI回复中的@信息，避免重复@
@@ -226,26 +239,26 @@ class GroupMessageHandler:
                 should_at = BotSettings.ENABLE_AT_REPLY and is_at
                 
                 # 调试信息
-                logger.debug(f"[调试] 是否启用@回复: {should_at}, ENABLE_AT_REPLY: {BotSettings.ENABLE_AT_REPLY}, is_at: {is_at}")
+                logger.debug(language_manager.get("debug.at_reply_strategy", should_at=should_at, enable_at=BotSettings.ENABLE_AT_REPLY, is_at=is_at))
                 
                 # 只有在被@的情况下才@回复用户，避免不必要的@
                 if should_at:
                     first_line_segments.append(At(user_info.user_id))
                     first_line_segments.append(Text(" "))
-                    logger.debug(f"[调试] 添加@用户 {user_info.user_id} 到回复消息")
+                    logger.debug(language_manager.get("debug.at_user_added", qq=user_info.user_id))
                 
                 # 根据昵称映射表添加@
                 if BotSettings.ENABLE_NICKNAME_ADDRESS_INJECTION and BotSettings.NICKNAME_ADDRESS_MAPPING:
                     first_msg = msgs[0]
                     
                     # 遍历昵称映射表，检查消息中是否包含映射的昵称
-                    for nickname, mapping in BotSettings.NICKNAME_ADDRESS_MAPPING.items():
-                        # 获取称呼
-                        address = mapping.get("address", nickname) if isinstance(mapping, dict) else mapping
+                    for address, mapping in BotSettings.NICKNAME_ADDRESS_MAPPING.items():
+                        # 获取昵称列表
+                        nicknames = mapping.get("nicknames", []) if isinstance(mapping, dict) else []
                         
-                        # 检查消息中是否包含该昵称或称呼
-                        if nickname in first_msg or address in first_msg:
-                            logger.debug(f"[调试] 检测到消息中包含昵称映射表中的名称: {nickname} -> {address}")
+                        # 检查消息中是否包含该称呼或对应的任何昵称
+                        if address in first_msg or any(nickname in first_msg for nickname in nicknames):
+                            logger.debug(language_manager.get("debug.nickname_detected", address=address, nicknames=nicknames))
                             
                             # 如果映射中包含QQ号，添加@
                             if isinstance(mapping, dict) and "qq" in mapping and mapping["qq"]:
@@ -254,7 +267,7 @@ class GroupMessageHandler:
                                 if qq_number != str(user_info.user_id):
                                     first_line_segments.append(At(qq_number))
                                     first_line_segments.append(Text(" "))
-                                    logger.debug(f"[调试] 根据昵称映射表添加@用户 {qq_number} (对应称呼: {address})")
+                                    logger.debug(language_manager.get("debug.nickname_mapped_at", qq=qq_number, address=address))
                 
                 first_line_segments.append(Text(msgs[0]))
                 
@@ -280,11 +293,11 @@ class GroupMessageHandler:
             
             # 记录记忆添加情况
             if ai_response.contains_memory_tag:
-                logger.info(f"[记忆] 添加长期记忆: {ai_response.memory_content[:50]}...") # type: ignore
+                logger.info(language_manager.get("info.memory_added", content=format_log_text(ai_response.memory_content, BotSettings.LOG_MAX_LENGTH))) # type: ignore
             
-            logger.info(f"[回复] 已发送回复，长度: {len(ai_response.content)}")
+            logger.info(language_manager.get("info.message_sent", length=len(ai_response.content)))
             return True
             
         except Exception as e:
-            logger.error(f"处理群消息失败: {e}", exc_info=True)
+            logger.error(language_manager.get("error.message_processing_failed", error=str(e)), exc_info=True)
             return False

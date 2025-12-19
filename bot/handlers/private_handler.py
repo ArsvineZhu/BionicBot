@@ -10,7 +10,8 @@ from bot.config.settings import BotSettings
 from bot.core.ai_client import AIClient
 from bot.core.model import Message, Content, ROLE_TYPE
 from bot.core.tracker import TargetTracker
-from bot.utils.helpers import get_masked_display_name
+from bot.utils.helpers import get_masked_display_name, format_log_text
+from bot.core.language_manager import language_manager
 
 logger = get_log("PrivateHandler")
 
@@ -58,28 +59,32 @@ class PrivateMessageHandler:
         
         # 跳过空消息（除非有图片）
         if not cleaned_message and not images:
+            logger.debug(language_manager.get("debug.message_ignored", mode="空消息"))
             return False
         
         # 记录日志
         masked_display_name = get_masked_display_name(user_info.display_name, user_info.user_id)
         if images:
-            logger.info(f"[私聊] {masked_display_name}: 发送了 {len(images)} 张图片")
+            logger.info(language_manager.get("info.private_message_received", user=masked_display_name, message=f"发送了 {len(images)} 张图片"))
         else:
-            logger.info(f"[私聊] {masked_display_name}: {cleaned_message[:50]}...")
-        
-        # 状态管理标志
-        status_set = False
+            logger.info(language_manager.get("info.private_message_received", user=masked_display_name, message=format_log_text(cleaned_message, BotSettings.LOG_MAX_LENGTH)))
         
         try:
-            # 设置状态为忙碌（表示输入中）- 只在开始处理时设置一次
-            await bot_api.set_online_status(status=50, ext_status=0, battery_status=0)
-            status_set = True
-            logger.debug("[状态] 已设置为输入中")
-            
             # 处理图片消息
             if images:
+                # 检查是否启用了图片解读
+                if not BotSettings.ENABLE_IMAGE_INTERPRETATION:
+                    logger.info(language_manager.get("info.image_interpretation_disabled", count=len(images)))
+                    return True
+                
                 for i, img in enumerate(images, 1):
-                    logger.info(f"[私聊] 正在解读图片 {i}: {img['url']}")
+                    # 根据概率决定是否解读该图片
+                    import random
+                    if random.random() > BotSettings.IMAGE_INTERPRETATION_PROBABILITY:
+                        logger.info(language_manager.get("info.image_skipped_by_probability", index=i))
+                        continue
+                    
+                    logger.info(language_manager.get("info.image_interpreting", index=i, url=img['url']))
                     
                     # 获取AI图片解读
                     ai_response = await self.ai_client.get_image_response(
@@ -109,9 +114,9 @@ class PrivateMessageHandler:
                         user_id=str(user_info.user_id)
                     )
                     
-                    logger.info(f"[上下文] 已将图片 {i} 的解读结果存入上下文")
+                    logger.info(language_manager.get("info.image_interpretation_stored", index=i))
             
-                logger.info(f"[处理] 已完成 {len(images)} 张图片的解读和上下文存储")
+                logger.info(language_manager.get("info.image_processing_complete"))
                 return True
             
             # 判断是否需要回复文本消息
@@ -125,7 +130,7 @@ class PrivateMessageHandler:
             )
             
             if not should_reply:
-                logger.debug(f"[忽略] 不符合回复条件 - 模式:{self.tracker.mode.value}")
+                logger.debug(language_manager.get("debug.message_ignored", mode=self.tracker.mode.value))
                 return False
             
             # 处理文本消息
@@ -147,7 +152,7 @@ class PrivateMessageHandler:
             api_time = api_end_time - api_start_time
             
             if not ai_response.content or ai_response.content.startswith("[错误]"):
-                logger.error(f"AI回复失败: {ai_response.content}")
+                logger.error(language_manager.get("error.ai_response_failed", content=ai_response.content))
                 return False
             
             # 清理AI回复中的@信息（私聊中通常不需要@）
@@ -188,15 +193,10 @@ class PrivateMessageHandler:
                         msg_delay = max(BotSettings.MIN_DELAY_SECONDS, BotSettings.BASE_DELAY_SECONDS + msg_length * BotSettings.DELAY_PER_CHARACTER)
                         await asyncio.sleep(msg_delay)
             
-            logger.info(f"[回复] 已发送私聊回复，长度: {len(ai_response.content)}")
+                logger.info(language_manager.get("info.message_sent", length=len(msg)))
             
             return True
             
         except Exception as e:
-            logger.error(f"处理私聊消息失败: {e}", exc_info=True)
+            logger.error(language_manager.get("error.message_processing_failed", error=str(e)), exc_info=True)
             return False
-        finally:
-            # 只在成功设置过状态的情况下，恢复在线状态
-            if status_set:
-                await bot_api.set_online_status(status=10, ext_status=0, battery_status=0)
-                logger.debug("[状态] 已恢复为在线")

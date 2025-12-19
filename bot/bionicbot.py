@@ -6,6 +6,7 @@ from ncatbot.utils import get_log
 from .config.settings import BotSettings
 from .core.ai_client import AIClient
 from .core.tracker import TargetTracker
+from .core.language_manager import language_manager
 from .handlers.group_handler import GroupMessageHandler
 from .handlers.private_handler import PrivateMessageHandler
 from .utils.helpers import mask_sensitive_data
@@ -19,6 +20,9 @@ class BionicBot:
     def __init__(self):
         # 验证配置
         BotSettings.validate_config()
+        
+        # 根据配置切换语言
+        language_manager.change_language(BotSettings.LANGUAGE)
         
         # 初始化核心组件
         self.bot = BotClient()
